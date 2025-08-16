@@ -1,0 +1,61 @@
+services:
+  segmentator-app:
+    container_name: segmentator-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://segmentator-mongo:27017/segmentator
+      - REDIS_HOST=segmentator-redis
+      - REDIS_PORT=6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_CLOUD_CREDENTIALS=${GOOGLE_CLOUD_CREDENTIALS}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    depends_on:
+      - segmentator-mongo
+      - segmentator-redis
+    restart: unless-stopped
+
+  segmentator-mongo:
+    container_name: segmentator-mongo
+    image: mongo:7.0
+    ports:
+      - '27017:27017'
+    volumes:
+      - segmentator-mongo-data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=segmentator
+    restart: unless-stopped
+
+  segmentator-redis:
+    container_name: segmentator-redis
+    image: redis:7.2-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - segmentator-redis-data:/data
+    restart: unless-stopped
+
+  segmentator-mongo-express:
+    container_name: segmentator-mongo-express
+    image: mongo-express:1.0.2
+    ports:
+      - '8081:8081'
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=segmentator-mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    depends_on:
+      - segmentator-mongo
+    restart: unless-stopped
+
+volumes:
+  segmentator-mongo-data:
+  segmentator-redis-data:
