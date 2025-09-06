@@ -1,4 +1,286 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { Model } from 'mongoose';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import * as ffmpeg from 'fluent-ffmpeg';
 
+import { File } from './schemas/file.schema';
+import { StorageType } from 'src/common/enums/storage-type.enum';
+import { FileOperationException } from 'src/common/exceptions/file-operation.exception';
+import { getErrorMessage, isNodeError } from 'src/common/utils/error.utils';
+import { TranscriptionJobData } from 'src/common/interfaces/transcription-job.interface';
+import { MIMES } from 'src/common/constants/mimes.constant';
+
+type VideoMetadata = {
+  duration: number;
+  format: string;
+  videoCodec?: string;
+  audioCodec?: string;
+  resolution: { width?: number; height?: number } | null;
+  bitrate: number | null;
+  frameRate: number | null;
+} | null;
 @Injectable()
-export class FilesService {}
+export class FilesService {
+  private readonly uploadPath = './uploads';
+
+  constructor(
+    @InjectModel(File.name) private fileModel: Model<File>,
+    @InjectQueue('transcription') private transcriptionQueue: Queue,
+  ) {
+    this.ensureUploadDirExists().catch(console.error);
+  }
+
+  private async ensureUploadDirExists(): Promise<void> {
+    try {
+      await fs.access(this.uploadPath);
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        await fs.mkdir(this.uploadPath, { recursive: true });
+      } else {
+        throw new FileOperationException(
+          'Failed to access upload directory',
+          'read',
+          this.uploadPath,
+          error,
+        );
+      }
+    }
+  }
+
+  async uploadFile(file: Express.Multer.File): Promise<File> {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const fileExtension = path.extname(file.originalname);
+    const storedName = `${uuidv4()}${fileExtension}`;
+    const filePath = path.join(this.uploadPath, storedName);
+
+    try {
+      await fs.writeFile(filePath, file.buffer);
+
+      const metadata: VideoMetadata = this.isVideoFile(file.mimetype)
+        ? await this.getVideoMetadata(filePath)
+        : null;
+
+      const fileRecord = new this.fileModel({
+        originalName: file.originalname,
+        storedName: storedName,
+        filePath: filePath,
+        storageType: StorageType.LOCAL,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        duration: metadata?.duration || 0,
+        format: metadata?.format || this.getFileFormat(file.originalname),
+        videoCodec: metadata?.videoCodec,
+        audioCodec: metadata?.audioCodec,
+        resolution: metadata?.resolution,
+        bitrate: metadata?.bitrate,
+        frameRate: metadata?.frameRate,
+        uploadedAt: new Date(),
+        totalProcessingRuns: 0,
+      });
+
+      const savedFile = await fileRecord.save();
+
+      if (this.isTranscribableFile(file.mimetype)) {
+        await this.queueTranscriptionJob(savedFile);
+      }
+      return savedFile;
+    } catch (error: unknown) {
+      await this.safeDeleteFile(filePath);
+
+      if (error instanceof Error && error.name === 'ValidationError') {
+        throw new BadRequestException(
+          `File validation failed: ${error.message}`,
+        );
+      }
+
+      throw new FileOperationException(
+        'File upload failed',
+        'upload',
+        filePath,
+        error,
+      );
+    }
+  }
+
+  private async queueTranscriptionJob(file: File): Promise<void> {
+    try {
+      const jobData: TranscriptionJobData = {
+        fileId: file._id?.toString() || '',
+        filePath: file.filePath,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        duration: file.duration,
+        priority: this.getJobPriority(file.duration),
+      };
+
+      const job = await this.transcriptionQueue.add(
+        'process-transcription',
+        jobData,
+        {
+          priority: jobData.priority,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        },
+      );
+
+      console.log(
+        `Transcription job queued: ${job.id} for file: ${file.originalName}`,
+      );
+    } catch (error: unknown) {
+      console.error(
+        'Failed to queue transcription job:',
+        getErrorMessage(error),
+      );
+      // Don't throw here - file upload was successful, transcription is secondary
+    }
+  }
+
+  private getJobPriority(duration: number): number {
+    // Shorter files get higher priority (lower number = higher priority)
+    if (duration < 60) return 1; // Less than 1 minute
+    if (duration < 300) return 5; // Less than 5 minutes
+    if (duration < 1800) return 10; // Less than 30 minutes
+    return 15; // 30+ minutes
+  }
+
+  private isTranscribableFile(mimeType: string): boolean {
+    return MIMES.includes(mimeType);
+  }
+
+  private async safeDeleteFile(filePath: string): Promise<void> {
+    try {
+      await fs.unlink(filePath);
+    } catch (unlinkError: unknown) {
+      console.warn(
+        'Failed to delete file after DB error:',
+        getErrorMessage(unlinkError),
+      );
+    }
+  }
+
+  private isVideoFile(mimeType: string): boolean {
+    return mimeType.startsWith('video/');
+  }
+
+  private getFileFormat(filename: string): string {
+    return path.extname(filename).slice(1).toLowerCase();
+  }
+
+  private async getVideoMetadata(filePath: string): Promise<VideoMetadata> {
+    return new Promise((resolve) => {
+      ffmpeg.ffprobe(filePath, (err, metadata) => {
+        if (err) {
+          console.warn('Failed to get video metadata:', getErrorMessage(err));
+          resolve(null);
+          return;
+        }
+
+        try {
+          const videoStream = metadata.streams?.find(
+            (s) => s.codec_type === 'video',
+          );
+          const audioStream = metadata.streams?.find(
+            (s) => s.codec_type === 'audio',
+          );
+
+          resolve({
+            duration: metadata.format?.duration || 0,
+            format: metadata.format?.format_name?.split(',')[0] || 'unknown',
+            videoCodec: videoStream?.codec_name,
+            audioCodec: audioStream?.codec_name,
+            resolution: videoStream
+              ? {
+                  width: videoStream.width,
+                  height: videoStream.height,
+                }
+              : null,
+            bitrate: metadata.format?.bit_rate
+              ? metadata.format.bit_rate
+              : null,
+            frameRate: videoStream?.r_frame_rate
+              ? this.parseFrameRate(videoStream.r_frame_rate)
+              : null,
+          });
+        } catch (parseError: unknown) {
+          console.warn(
+            'Failed to parse video metadata:',
+            getErrorMessage(parseError),
+          );
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  private parseFrameRate(frameRateString: string): number | null {
+    if (!frameRateString) return null;
+    const [num, den] = frameRateString.split('/').map(Number);
+    return den ? Math.round(num / den) : num;
+  }
+
+  async getFileById(id: string): Promise<File> {
+    try {
+      const file = await this.fileModel.findById(id).exec();
+      if (!file) {
+        throw new BadRequestException('File not found');
+      }
+      return file;
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to retrieve file');
+    }
+  }
+
+  async deleteFile(id: string): Promise<void> {
+    try {
+      const file = await this.fileModel.findById(id);
+      if (!file) {
+        throw new BadRequestException('File not found');
+      }
+
+      await this.safeDeleteFile(file.filePath);
+
+      await this.fileModel.findByIdAndDelete(id);
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new FileOperationException(
+        'Failed to delete file',
+        'delete',
+        undefined,
+        error,
+      );
+    }
+  }
+
+  async getAllFiles(): Promise<File[]> {
+    console.log('Retrieving all files from the database');
+    try {
+      return await this.fileModel.find().sort({ uploadedAt: -1 }).exec();
+    } catch (error: unknown) {
+      throw new InternalServerErrorException(
+        `Failed to retrieve files: ${getErrorMessage(error)}`,
+      );
+    }
+  }
+}

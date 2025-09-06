@@ -37,6 +37,18 @@ export class Transcription extends Document {
 
   @Prop({ required: true })
   fullText: string;
+
+  @Prop({
+    default: 'pending',
+    enum: ['pending', 'processing', 'completed', 'failed'],
+  })
+  status: string;
+
+  @Prop()
+  completedAt?: Date;
+
+  @Prop()
+  error?: string;
 }
 export const TranscriptionSchema = SchemaFactory.createForClass(Transcription);
 
