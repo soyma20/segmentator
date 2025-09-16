@@ -13,6 +13,8 @@ import {
   TranscriptionSegmentSchema,
 } from './schemas/transcription-segment.schema';
 import { QueuesModule } from 'src/queues/queues.module';
+import { GoogleSpeechService } from 'src/external-apis/google-speech/google-speech.service';
+import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
 
 @Module({
   imports: [
@@ -24,9 +26,17 @@ import { QueuesModule } from 'src/queues/queues.module';
     BullModule.registerQueue({
       name: 'transcription',
     }),
+    BullModule.registerQueue({
+      name: 'analysis',
+    }),
   ],
   controllers: [TranscriptionController],
-  providers: [TranscriptionService, TranscriptionProcessor],
+  providers: [
+    TranscriptionService,
+    TranscriptionProcessor,
+    GoogleSpeechService,
+    FfmpegService,
+  ],
   exports: [TranscriptionService],
 })
 export class TranscriptionModule {}

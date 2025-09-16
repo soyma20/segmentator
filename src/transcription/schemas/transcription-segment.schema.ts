@@ -6,10 +6,10 @@ export class TranscriptionSegment {
   _id: string;
 
   @Prop({ required: true })
-  startTime: string;
+  startTime: string; // formatted time (e.g., "00:01:30")
 
   @Prop({ required: true })
-  endTime: string;
+  endTime: string; // formatted time (e.g., "00:02:30")
 
   @Prop({ required: true })
   startSeconds: number;
@@ -29,8 +29,9 @@ export class TranscriptionSegment {
   @Prop({ required: true })
   avgConfidence: number;
 
-  @Prop({ required: true })
+  @Prop({ default: false })
   speakerChange: boolean;
 }
+
 export const TranscriptionSegmentSchema =
   SchemaFactory.createForClass(TranscriptionSegment);

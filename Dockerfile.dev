@@ -1,29 +1,23 @@
-# Use Node.js LTS version
 FROM node:20-alpine
 
-# Install FFmpeg
-RUN apk add --no-cache ffmpeg
+# Install FFmpeg and bash (useful in dev)
+RUN apk add --no-cache ffmpeg bash
 
-# Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy only package files first (cache layer for deps)
 COPY package*.json ./
 
-# Install all dependencies (dev + prod)
+# Install deps
 RUN npm install
 
-# Copy source code
+# Copy project files (excluding node_modules via .dockerignore)
 COPY . .
 
-# Copy .env to container root
-COPY .env .env
-
-# Create uploads directory
+# Ensure uploads dir exists
 RUN mkdir -p uploads
 
-# Expose port
 EXPOSE 3000
 
-# Start NestJS in watch mode (hot reload)
+# Run in dev mode with hot reload
 CMD ["npm", "run", "start:dev"]
