@@ -10,6 +10,7 @@ import {
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
 import { QueuesModule } from 'src/queues/queues.module';
+import { StorageModule } from 'src/common/providers/storage/storage.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { QueuesModule } from 'src/queues/queues.module';
       { name: ProcessingHistory.name, schema: ProcessingHistorySchema },
     ]),
     QueuesModule,
+    StorageModule,
     BullModule.registerQueue({
       name: 'transcription',
     }),

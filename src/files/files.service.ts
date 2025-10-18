@@ -22,6 +22,7 @@ import { UploadFileDto } from './dto/upload-file.dto';
 import { ProcessingHistory } from 'src/processing/schemas/processing-history.schema';
 import { ProcessingStatus } from 'src/common/enums/processing-status.enum';
 import { VideoType } from 'src/common/enums/video-type.enum';
+import { StorageService } from 'src/common/providers/storage/storage.service';
 
 type VideoMetadata = {
   duration: number;
@@ -34,33 +35,13 @@ type VideoMetadata = {
 } | null;
 @Injectable()
 export class FilesService {
-  private readonly uploadPath = './uploads';
-
   constructor(
     @InjectModel(File.name) private fileModel: Model<File>,
     @InjectModel(ProcessingHistory.name)
     private processingHistoryModel: Model<ProcessingHistory>,
     @InjectQueue('transcription') private transcriptionQueue: Queue,
-  ) {
-    this.ensureUploadDirExists().catch(console.error);
-  }
-
-  private async ensureUploadDirExists(): Promise<void> {
-    try {
-      await fs.access(this.uploadPath);
-    } catch (error: unknown) {
-      if (isNodeError(error) && error.code === 'ENOENT') {
-        await fs.mkdir(this.uploadPath, { recursive: true });
-      } else {
-        throw new FileOperationException(
-          'Failed to access upload directory',
-          'read',
-          this.uploadPath,
-          error,
-        );
-      }
-    }
-  }
+    private readonly storageService: StorageService,
+  ) {}
 
   async uploadFile(
     file: Express.Multer.File,
@@ -74,22 +55,19 @@ export class FilesService {
       throw new BadRequestException('Language code is required');
     }
 
-    const fileExtension = path.extname(file.originalname);
-    const storedName = `${uuidv4()}${fileExtension}`;
-    const filePath = path.join(this.uploadPath, storedName);
-
     try {
-      await fs.writeFile(filePath, file.buffer);
+      // Use storage service to upload file
+      const uploadResult = await this.storageService.uploadFile(file);
 
       const metadata: VideoMetadata = this.isVideoFile(file.mimetype)
-        ? await this.getVideoMetadata(filePath)
+        ? await this.getVideoMetadata(uploadResult.filePath)
         : null;
 
       const fileRecord = new this.fileModel({
         originalName: file.originalname,
-        storedName: storedName,
-        filePath: filePath,
-        storageType: StorageType.LOCAL,
+        storedName: path.basename(uploadResult.filePath),
+        filePath: uploadResult.filePath,
+        storageType: StorageType.LOCAL, // This will be determined by the storage service
         mimeType: file.mimetype,
         fileSize: file.size,
         duration: metadata?.duration || 0,
@@ -125,7 +103,12 @@ export class FilesService {
 
       return { file: savedFile, processingHistory };
     } catch (error: unknown) {
-      await this.safeDeleteFile(filePath);
+      // Clean up uploaded file if database operation fails
+      try {
+        await this.storageService.deleteFile(file.originalname);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup file after error:', cleanupError);
+      }
 
       if (error instanceof Error && error.name === 'ValidationError') {
         throw new BadRequestException(
@@ -136,7 +119,7 @@ export class FilesService {
       throw new FileOperationException(
         'File upload failed',
         'upload',
-        filePath,
+        file.originalname,
         error,
       );
     }

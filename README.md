@@ -20,7 +20,7 @@ Main tasks:
 - **`src/analysis`** — analyzing the resulting text (classification, segmentation, evaluation)
 - **`src/queues`** — queues for asynchronous tasks (BullMQ, Redis)
 - **`src/services/ffmpeg`** — integration with **FFmpeg** (extracting audio from video)
-- **`src/external-apis`** — integration with external services (Google Cloud, OpenAI)
+- **`src/common/providers`** — abstraction layers for external services (Storage, Audio Processing, LLM)
 - **`src/database`** — working with the database (**MongoDB via Mongoose**)
 
 ---

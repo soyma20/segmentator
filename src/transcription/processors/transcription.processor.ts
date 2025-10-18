@@ -8,7 +8,7 @@ import {
   TranscriptionJobData,
   TranscriptionJobResult,
 } from 'src/common/interfaces/transcription-job.interface';
-import { GoogleSpeechService } from 'src/external-apis/google-speech/google-speech.service';
+import { AudioProcessingService } from 'src/common/providers/audio-processing/audio-processing.service';
 import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
 import { getErrorMessage } from 'src/common/utils/error.utils';
 
@@ -23,7 +23,7 @@ export class TranscriptionProcessor extends WorkerHost {
 
   constructor(
     private readonly transcriptionService: TranscriptionService,
-    private readonly googleSpeechService: GoogleSpeechService,
+    private readonly audioProcessingService: AudioProcessingService,
     private readonly ffmpegService: FfmpegService,
     @InjectQueue('analysis') private analysisQueue: Queue,
   ) {
@@ -61,12 +61,13 @@ export class TranscriptionProcessor extends WorkerHost {
 
       // Step 2: Transcribe and segment audio
       this.logger.log(`Starting transcription: ${originalName}`);
-      const segments = await this.googleSpeechService.transcribeAndSegmentAudio(
-        audioFilePath,
-        languageCode,
-        16000,
-        60,
-      );
+      const segments =
+        await this.audioProcessingService.transcribeAndSegmentAudio(
+          audioFilePath,
+          languageCode,
+          16000,
+          60,
+        );
 
       // Step 3: Save transcription to database
       const transcription =

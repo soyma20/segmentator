@@ -18,7 +18,7 @@ import {
   ProcessingHistorySchema,
 } from '../processing/schemas/processing-history.schema';
 import { QueuesModule } from 'src/queues/queues.module';
-import { GoogleSpeechService } from 'src/external-apis/google-speech/google-speech.service';
+import { AudioProcessingModule } from 'src/common/providers/audio-processing/audio-processing.module';
 import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
 
 @Module({
@@ -30,6 +30,7 @@ import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
       { name: ProcessingHistory.name, schema: ProcessingHistorySchema },
     ]),
     QueuesModule,
+    AudioProcessingModule,
     BullModule.registerQueue({
       name: 'transcription',
     }),
@@ -38,12 +39,7 @@ import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
     }),
   ],
   controllers: [TranscriptionController],
-  providers: [
-    TranscriptionService,
-    TranscriptionProcessor,
-    GoogleSpeechService,
-    FfmpegService,
-  ],
+  providers: [TranscriptionService, TranscriptionProcessor, FfmpegService],
   exports: [TranscriptionService],
 })
 export class TranscriptionModule {}

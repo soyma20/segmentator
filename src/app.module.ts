@@ -10,8 +10,6 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { ClippingModule } from './processing/clipping.module';
 import { QueuesModule } from 'src/queues/queues.module';
 import { DatabaseModule } from './database/database.module';
-import { OpenaiModule } from './external-apis/openai/openai.module';
-import { GoogleSpeechModule } from './external-apis/google-speech/google-speech.module';
 import { FfmpegModule } from './services/ffmpeg/ffmpeg.module';
 
 @Module({
@@ -26,8 +24,6 @@ import { FfmpegModule } from './services/ffmpeg/ffmpeg.module';
     AnalysisModule,
     ClippingModule,
     QueuesModule,
-    OpenaiModule,
-    GoogleSpeechModule,
     FfmpegModule,
   ],
   controllers: [AppController],

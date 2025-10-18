@@ -10,7 +10,7 @@ import { AnalysisService } from './analysis.service';
 import { AnalysisController } from './analysis.controller';
 import { AnalysisProcessor } from './processors/analysis.processor';
 import { TranscriptionModule } from '../transcription/transcription.module';
-import { OpenaiModule } from '../external-apis/openai/openai.module';
+import { LlmModule } from 'src/common/providers/llm/llm.module';
 import {
   ProcessingHistory,
   ProcessingHistorySchema,
@@ -34,7 +34,7 @@ import {
       name: 'clipping',
     }),
     TranscriptionModule,
-    OpenaiModule,
+    LlmModule,
   ],
   controllers: [AnalysisController],
   providers: [AnalysisService, AnalysisProcessor],

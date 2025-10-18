@@ -8,11 +8,11 @@ import { ProcessingHistory } from '../processing/schemas/processing-history.sche
 import { AnalysisResult } from './schemas/analysis.schema';
 import { AnalyzedSegment } from './schemas/analyzed-segment.schema';
 import { OptimizedSegment } from './schemas/optimized-segment.schema';
+import { LlmService } from 'src/common/providers/llm/llm.service';
 import {
-  OpenaiService,
   SegmentAnalysisRequest,
   SegmentAnalysisResponse,
-} from '../external-apis/openai/openai.service';
+} from 'src/common/interfaces/llm.interface';
 import { getErrorMessage } from '../common/utils/error.utils';
 
 type SegmentForAnalysis = {
@@ -58,7 +58,7 @@ export class AnalysisService {
   constructor(
     @InjectModel(AnalysisResult.name)
     private analysisResultModel: Model<AnalysisResult>,
-    private readonly openaiService: OpenaiService,
+    private readonly llmService: LlmService,
   ) {}
 
   async analyzeSegments(
@@ -112,8 +112,9 @@ export class AnalysisService {
       return {
         analyzedSegments,
         optimizedSegments,
-        overallSummary: analysisResponse.overallSummary,
-        mainTopics: analysisResponse.mainTopics,
+        overallSummary:
+          analysisResponse.overallSummary || 'No summary available',
+        mainTopics: analysisResponse.mainTopics || [],
         metrics,
       };
     } catch (error) {
@@ -136,17 +137,9 @@ export class AnalysisService {
     segments: SegmentForAnalysis[],
     configuration: ProcessingHistory['configuration'],
   ): Promise<SegmentAnalysisResponse> {
-    // Estimate tokens for the full request
-    const fullPrompt = this.buildContextPrompt(configuration, segments);
-    const estimatedTokens = this.openaiService.estimateTokens(fullPrompt);
-
-    if (estimatedTokens <= this.MAX_TOKENS_PER_REQUEST) {
-      // Process all segments in one batch
-      return this.processSegmentsBatch(segments, configuration);
-    } else {
-      // Split into smaller batches
-      return this.processSegmentsInBatches(segments, configuration);
-    }
+    // For now, process all segments in one batch
+    // TODO: Implement token estimation for different LLM providers
+    return this.processSegmentsBatch(segments, configuration);
   }
 
   private async processSegmentsBatch(
@@ -161,7 +154,7 @@ export class AnalysisService {
       analysisLanguage: 'en', // TODO: Get from configuration
     };
 
-    return await this.openaiService.analyzeSegments(request);
+    return await this.llmService.analyzeSegments(request);
   }
 
   private async processSegmentsInBatches(
@@ -196,7 +189,7 @@ export class AnalysisService {
     return {
       segments: mergedSegments,
       overallSummary: results.map((r) => r.overallSummary).join(' '),
-      mainTopics: uniqueMainTopics,
+      mainTopics: uniqueMainTopics.filter((topic) => topic !== undefined),
     };
   }
 
