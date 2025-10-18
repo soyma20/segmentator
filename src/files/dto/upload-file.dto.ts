@@ -10,6 +10,18 @@ import {
 import { LlmProvider } from 'src/common/enums/llm-provider.enum';
 import { VideoType } from 'src/common/enums/video-type.enum';
 
+export class ClippingConfigDto {
+  @IsNumber()
+  @Min(1)
+  @Max(50)
+  maxClips: number;
+
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  minScoreThreshold: number;
+}
+
 export class AnalysisConfigDto {
   @IsEnum(VideoType)
   videoType: VideoType;
@@ -46,6 +58,9 @@ export class ProcessingConfigurationDto {
 
   @IsOptional()
   analysisConfig?: AnalysisConfigDto;
+
+  @IsOptional()
+  clippingConfig?: ClippingConfigDto;
 }
 
 export class UploadFileDto {

@@ -5,6 +5,10 @@ import {
   ProcessingHistory,
   ProcessingHistorySchema,
 } from './schemas/processing-history.schema';
+import {
+  AnalysisResult,
+  AnalysisResultSchema,
+} from '../analysis/schemas/analysis.schema';
 import { ProcessingService } from './processing.service';
 import { ProcessingController } from './processing.controller';
 
@@ -15,6 +19,7 @@ import { ProcessingController } from './processing.controller';
     }),
     MongooseModule.forFeature([
       { name: ProcessingHistory.name, schema: ProcessingHistorySchema },
+      { name: AnalysisResult.name, schema: AnalysisResultSchema },
     ]),
   ],
   controllers: [ProcessingController],

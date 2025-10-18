@@ -161,6 +161,10 @@ export class FilesService {
           minInformativenessScore: 0.5,
           maxCombinedDuration: 300,
         },
+        clippingConfig: config.clippingConfig || {
+          maxClips: 10,
+          minScoreThreshold: 5,
+        },
       },
       processing_metrics: {},
     });

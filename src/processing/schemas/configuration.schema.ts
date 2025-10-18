@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { LlmProvider } from 'src/common/enums/llm-provider.enum';
 import { AnalysisConfig, AnalysisConfigSchema } from './analysis-config.schema';
+import { ClippingConfig, ClippingConfigSchema } from './clipping-config.schema';
 
 @Schema({ _id: false })
 export class Configuration {
@@ -15,5 +16,8 @@ export class Configuration {
 
   @Prop({ type: AnalysisConfigSchema, required: true })
   analysisConfig: AnalysisConfig;
+
+  @Prop({ type: ClippingConfigSchema, required: true })
+  clippingConfig: ClippingConfig;
 }
 export const ConfigurationSchema = SchemaFactory.createForClass(Configuration);

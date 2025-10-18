@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
-import { Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
   ClippingJobData,
   ClippingJobResult,
 } from './processors/clipping.processor';
+import { AnalysisResult } from '../analysis/schemas/analysis.schema';
+import { ProcessingHistory } from './schemas/processing-history.schema';
 
 @Injectable()
 export class ProcessingService {
@@ -14,10 +17,13 @@ export class ProcessingService {
   constructor(
     @InjectQueue('clipping')
     private clippingQueue: Queue<ClippingJobData>,
+    @InjectModel(AnalysisResult.name)
+    private analysisResultModel: Model<AnalysisResult>,
   ) {}
 
   /**
    * Triggers video clipping job based on analysis results
+   * Override parameters take precedence over stored configuration
    */
   async triggerClippingJob(
     analysisId: string,
@@ -26,8 +32,6 @@ export class ProcessingService {
       minScoreThreshold?: number;
     } = {},
   ): Promise<void> {
-    const { maxClips = 10, minScoreThreshold = 6 } = options;
-
     // Validate ObjectId format
     if (!Types.ObjectId.isValid(analysisId)) {
       throw new Error(
@@ -35,9 +39,43 @@ export class ProcessingService {
       );
     }
 
+    // Fetch analysis result to get stored configuration
+    const analysisResult = await this.analysisResultModel
+      .findById(analysisId)
+      .populate('processingId')
+      .exec();
+
+    if (!analysisResult) {
+      throw new Error(`Analysis result not found: ${analysisId}`);
+    }
+
+    // Cast the populated processingId to ProcessingHistory
+    const processingHistory =
+      analysisResult.processingId as unknown as ProcessingHistory;
+
+    // Get configuration values with override support
+    const maxClips =
+      options.maxClips ??
+      processingHistory.configuration.clippingConfig.maxClips;
+    const minScoreThreshold =
+      options.minScoreThreshold ??
+      processingHistory.configuration.clippingConfig.minScoreThreshold;
+
     this.logger.log(
       `Triggering clipping job for analysis ${analysisId} with maxClips: ${maxClips}, minScore: ${minScoreThreshold}`,
     );
+
+    // Log if override values are being used
+    if (options.maxClips !== undefined) {
+      this.logger.log(
+        `Using override maxClips: ${options.maxClips} (config: ${processingHistory.configuration.clippingConfig.maxClips})`,
+      );
+    }
+    if (options.minScoreThreshold !== undefined) {
+      this.logger.log(
+        `Using override minScoreThreshold: ${options.minScoreThreshold} (config: ${processingHistory.configuration.clippingConfig.minScoreThreshold})`,
+      );
+    }
 
     try {
       await this.clippingQueue.add(

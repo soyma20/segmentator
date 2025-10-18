@@ -2,7 +2,9 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Model } from 'mongoose';
+import { Queue } from 'bullmq';
 
 import { AnalysisService } from '../analysis.service';
 import { TranscriptionService } from '../../transcription/transcription.service';
@@ -10,6 +12,7 @@ import { ProcessingHistory } from '../../processing/schemas/processing-history.s
 import { Transcription } from '../../transcription/schemas/transcription.schema';
 import { AnalysisResult } from '../schemas/analysis.schema';
 import { getErrorMessage } from '../../common/utils/error.utils';
+import { ClippingJobData } from '../../processing/processors/clipping.processor';
 
 export interface AnalysisJobData {
   transcription: {
@@ -38,6 +41,8 @@ export class AnalysisProcessor extends WorkerHost {
     private transcriptionModel: Model<Transcription>,
     @InjectModel(AnalysisResult.name)
     private analysisResultModel: Model<AnalysisResult>,
+    @InjectQueue('clipping')
+    private clippingQueue: Queue<ClippingJobData>,
   ) {
     super();
   }
@@ -112,6 +117,12 @@ export class AnalysisProcessor extends WorkerHost {
         'Analysis completed successfully',
       );
 
+      // Automatically trigger clipping job after successful analysis
+      await this.triggerAutoClipping(
+        savedAnalysis,
+        processingHistory.configuration,
+      );
+
       this.logger.log(
         `Analysis completed successfully for transcription: ${transcriptionId}`,
       );
@@ -158,6 +169,65 @@ export class AnalysisProcessor extends WorkerHost {
         status: 'failed',
         error: errorMessage,
       };
+    }
+  }
+
+  /**
+   * Automatically triggers clipping job after successful analysis
+   */
+  private async triggerAutoClipping(
+    analysisResult: AnalysisResult,
+    configuration: ProcessingHistory['configuration'],
+  ): Promise<void> {
+    try {
+      // Check if there are any optimized segments worth clipping
+      const highValueSegments = analysisResult.optimizedSegments.filter(
+        (segment) =>
+          segment.aggregatedScore >=
+          (configuration.analysisConfig.minInformativenessScore || 5),
+      );
+
+      if (highValueSegments.length === 0) {
+        this.logger.log(
+          `No high-value segments found for auto-clipping. Skipping automatic clipping for analysis: ${analysisResult._id}`,
+        );
+        return;
+      }
+
+      // Use configuration-based clipping parameters
+      const clippingOptions = {
+        maxClips: configuration.clippingConfig.maxClips,
+        minScoreThreshold: configuration.clippingConfig.minScoreThreshold,
+      };
+
+      // Queue the clipping job
+      await this.clippingQueue.add(
+        'clip-video',
+        {
+          analysisResult: { _id: String(analysisResult._id) },
+          maxClips: clippingOptions.maxClips,
+          minScoreThreshold: clippingOptions.minScoreThreshold,
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        },
+      );
+
+      this.logger.log(
+        `Auto-clipping job queued successfully for analysis: ${analysisResult._id} with ${highValueSegments.length} high-value segments`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to queue auto-clipping job for analysis: ${analysisResult._id}`,
+        getErrorMessage(error),
+      );
+      // Don't throw the error - we don't want to fail the analysis if clipping fails
     }
   }
 

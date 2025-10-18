@@ -30,6 +30,9 @@ import {
     BullModule.registerQueue({
       name: 'analysis',
     }),
+    BullModule.registerQueue({
+      name: 'clipping',
+    }),
     TranscriptionModule,
     OpenaiModule,
   ],
