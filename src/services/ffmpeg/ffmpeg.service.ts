@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import ffmpeg from 'fluent-ffmpeg';
-import { ensureDir } from 'fs-extra';
+import { mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
 
 export interface Timecode {
   start: string;
@@ -11,6 +12,21 @@ export interface Timecode {
 export class FfmpegService {
   private readonly logger = new Logger(FfmpegService.name);
 
+  async ensureDir(dirPath: string): Promise<void> {
+    try {
+      if (!existsSync(dirPath)) {
+        await mkdir(dirPath, { recursive: true });
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to create directory ${dirPath}: ${errorMessage}`,
+      );
+      throw error;
+    }
+  }
+
   async convertVideoToAudio(
     inputPath: string,
     outputPath: string,
@@ -20,7 +36,7 @@ export class FfmpegService {
     );
 
     const outputDir = outputPath.substring(0, outputPath.lastIndexOf('/'));
-    await ensureDir(outputDir);
+    await this.ensureDir(outputDir);
 
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
@@ -56,7 +72,7 @@ export class FfmpegService {
       0,
       outputPattern.lastIndexOf('/'),
     );
-    await ensureDir(outputDir);
+    await this.ensureDir(outputDir);
 
     timecodes.forEach((timecode, index) => {
       const outputPath = outputPattern.replace('%i', String(index + 1));

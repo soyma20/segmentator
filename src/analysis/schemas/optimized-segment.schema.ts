@@ -31,6 +31,9 @@ export class OptimizedSegment {
 
   @Prop({ required: true })
   extractionPriority: number;
+
+  @Prop({ required: true })
+  rank: number;
 }
 export const OptimizedSegmentSchema =
   SchemaFactory.createForClass(OptimizedSegment);

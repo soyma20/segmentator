@@ -21,6 +21,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     BullModule.registerQueue({
       name: 'analysis',
     }),
+    BullModule.registerQueue({
+      name: 'clipping',
+    }),
   ],
   exports: [BullModule],
 })

@@ -7,6 +7,7 @@ import { FilesModule } from './files/files.module';
 import { ProcessingModule } from './processing/processing.module';
 import { TranscriptionModule } from './transcription/transcription.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { ClippingModule } from './processing/clipping.module';
 import { QueuesModule } from 'src/queues/queues.module';
 import { DatabaseModule } from './database/database.module';
 import { OpenaiModule } from './external-apis/openai/openai.module';
@@ -23,6 +24,7 @@ import { FfmpegModule } from './services/ffmpeg/ffmpeg.module';
     ProcessingModule,
     TranscriptionModule,
     AnalysisModule,
+    ClippingModule,
     QueuesModule,
     OpenaiModule,
     GoogleSpeechModule,

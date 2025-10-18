@@ -40,6 +40,13 @@ export interface AnalysisResultData {
       average: number; // 5-6
       poor: number; // 1-4
     };
+    optimizationMetrics: {
+      segmentsReduction: number;
+      reductionPercentage: number;
+      averageDurationIncrease: number;
+      combinedSegmentsCount: number;
+      mergingEfficiency: number;
+    };
   };
 }
 
@@ -81,6 +88,9 @@ export class AnalysisService {
         analysisResponse.segments,
       );
 
+      // Calculate percentile ranks for all segments
+      this.calculatePercentileRanks(analyzedSegments);
+
       // Step 4: Optimize segments (Stage 3 preparation)
       const optimizedSegments = this.optimizeSegments(
         analyzedSegments,
@@ -90,6 +100,7 @@ export class AnalysisService {
       // Step 5: Calculate metrics
       const metrics = this.calculateMetrics(
         analyzedSegments,
+        optimizedSegments,
         analysisResponse,
         Date.now() - startTime,
       );
@@ -226,7 +237,7 @@ ${segmentsText}`;
         endTime: segment.endTime,
         duration: segment.duration,
         informativenessScore: analysis.informativenessScore,
-        percentileRank: 0, // Will be calculated later
+        percentileRank: 0, // Will be calculated after all segments are created
         title: this.generateSegmentTitle(segment.text),
         summary: this.generateSegmentSummary(segment.text),
         keyTopics: analysis.keyTopics,
@@ -268,27 +279,323 @@ ${segmentsText}`;
     return wordCount > 0 ? uniqueWords / wordCount : 0;
   }
 
+  /**
+   * Calculates percentile ranks for all analyzed segments
+   */
+  private calculatePercentileRanks(analyzedSegments: AnalyzedSegment[]): void {
+    const scores = analyzedSegments.map((s) => s.informativenessScore);
+
+    analyzedSegments.forEach((segment) => {
+      segment.percentileRank = this.calculatePercentile(
+        segment.informativenessScore,
+        scores,
+      );
+    });
+  }
+
   private optimizeSegments(
     analyzedSegments: AnalyzedSegment[],
     analysisConfig: ProcessingHistory['configuration']['analysisConfig'],
   ): OptimizedSegment[] {
-    // This is a simplified version of Stage 3 optimization
-    // Full implementation would include merging logic
-    return analyzedSegments.map((segment) => ({
-      _id: segment.segmentId,
-      startTime: segment.startTime,
-      endTime: segment.endTime,
-      duration: segment.duration,
-      combinedSegmentIds: [segment.segmentId],
-      aggregatedScore: segment.informativenessScore,
-      finalTitle: segment.title,
-      finalSummary: segment.summary,
-      finalKeyTopics: segment.keyTopics,
-      extractionPriority: this.calculateExtractionPriority(
+    this.logger.log('Starting Stage 3: Optimization and Result Formation');
+
+    // Step 1: Optimize segments by merging adjacent ones
+    const optimizedSegments = this.optimizeSegmentsByMerging(analyzedSegments);
+
+    // Step 2: Rank and filter segments
+    const rankedSegments = this.rankAndFilterSegments(
+      optimizedSegments,
+      analysisConfig.minInformativenessScore || 5,
+    );
+
+    this.logger.log(
+      `Stage 3 completed. Optimized ${analyzedSegments.length} segments into ${rankedSegments.length} final segments`,
+    );
+
+    return rankedSegments;
+  }
+
+  /**
+   * Implements the OptimizeSegments algorithm from the specification
+   * Analyzes adjacent segments for potential merging based on criteria
+   */
+  private optimizeSegmentsByMerging(
+    analyzedSegments: AnalyzedSegment[],
+  ): OptimizedSegment[] {
+    const optimized: OptimizedSegment[] = [];
+    let currentGroup: AnalyzedSegment[] = [];
+
+    for (let i = 0; i < analyzedSegments.length; i++) {
+      const segment = analyzedSegments[i];
+
+      if (this.shouldCombine(segment, currentGroup)) {
+        currentGroup.push(segment);
+      } else {
+        // Process the current group if it's not empty
+        if (currentGroup.length > 0) {
+          const combined = this.combineSegments(currentGroup);
+          optimized.push(combined);
+        }
+        // Start a new group with the current segment
+        currentGroup = [segment];
+      }
+    }
+
+    // Process the last group if it exists
+    if (currentGroup.length > 0) {
+      const combined = this.combineSegments(currentGroup);
+      optimized.push(combined);
+    }
+
+    return optimized;
+  }
+
+  /**
+   * Determines if a segment should be combined with the current group
+   */
+  private shouldCombine(
+    segment: AnalyzedSegment,
+    currentGroup: AnalyzedSegment[],
+  ): boolean {
+    if (currentGroup.length === 0) {
+      return true; // Always start with the first segment
+    }
+
+    const lastSegment = currentGroup[currentGroup.length - 1];
+
+    // Check if the last segment in the group recommends combining with next
+    if (lastSegment.shouldCombineWithNext) {
+      return true;
+    }
+
+    // Additional criteria for combination:
+    // 1. Similar informativeness scores (within 2 points)
+    const scoreDifference = Math.abs(
+      segment.informativenessScore - lastSegment.informativenessScore,
+    );
+    if (scoreDifference <= 2) {
+      return true;
+    }
+
+    // 2. Overlapping key topics
+    const hasOverlappingTopics = segment.keyTopics.some((topic) =>
+      lastSegment.keyTopics.some(
+        (lastTopic) =>
+          topic.toLowerCase().includes(lastTopic.toLowerCase()) ||
+          lastTopic.toLowerCase().includes(topic.toLowerCase()),
+      ),
+    );
+
+    if (hasOverlappingTopics) {
+      return true;
+    }
+
+    // 3. Both segments are high-value (score >= 7)
+    if (
+      segment.informativenessScore >= 7 &&
+      lastSegment.informativenessScore >= 7
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Combines multiple segments into a single optimized segment
+   */
+  private combineSegments(segments: AnalyzedSegment[]): OptimizedSegment {
+    if (segments.length === 1) {
+      const segment = segments[0];
+      return {
+        _id: segment.segmentId,
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+        duration: segment.duration,
+        combinedSegmentIds: [segment.segmentId],
+        aggregatedScore: segment.informativenessScore,
+        finalTitle: segment.title,
+        finalSummary: segment.summary,
+        finalKeyTopics: segment.keyTopics,
+        extractionPriority: segment.informativenessScore,
+        rank: 1, // Single segment gets rank 1
+      };
+    }
+
+    // Sort segments by start time to ensure proper ordering
+    const sortedSegments = [...segments].sort(
+      (a, b) =>
+        this.timeToSeconds(a.startTime) - this.timeToSeconds(b.startTime),
+    );
+
+    const firstSegment = sortedSegments[0];
+    const lastSegment = sortedSegments[sortedSegments.length - 1];
+
+    // Calculate aggregated metrics
+    const scores = sortedSegments.map((s) => s.informativenessScore);
+    const aggregatedScore = this.calculateAggregatedScore(scores);
+
+    // Combine key topics (remove duplicates)
+    const allTopics = sortedSegments.flatMap((s) => s.keyTopics);
+    const uniqueTopics = [...new Set(allTopics)];
+
+    // Create combined title and summary
+    const combinedTitle = this.createCombinedTitle(sortedSegments);
+    const combinedSummary = this.createCombinedSummary(sortedSegments);
+
+    return {
+      _id: firstSegment.segmentId, // Use first segment's ID as primary
+      startTime: firstSegment.startTime,
+      endTime: lastSegment.endTime,
+      duration:
+        this.timeToSeconds(lastSegment.endTime) -
+        this.timeToSeconds(firstSegment.startTime),
+      combinedSegmentIds: sortedSegments.map((s) => s.segmentId),
+      aggregatedScore,
+      finalTitle: combinedTitle,
+      finalSummary: combinedSummary,
+      finalKeyTopics: uniqueTopics,
+      extractionPriority: aggregatedScore,
+      rank: 1, // Will be updated during ranking phase
+    };
+  }
+
+  /**
+   * Calculates aggregated score for combined segments
+   */
+  private calculateAggregatedScore(scores: number[]): number {
+    if (scores.length === 1) {
+      return scores[0];
+    }
+
+    // Weighted average with higher scores having more weight
+    const weights = scores.map((score) => Math.pow(score, 1.5));
+    const weightedSum = scores.reduce(
+      (sum, score, index) => sum + score * weights[index],
+      0,
+    );
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+
+    return Math.round((weightedSum / totalWeight) * 10) / 10; // Round to 1 decimal place
+  }
+
+  /**
+   * Creates a combined title from multiple segments
+   */
+  private createCombinedTitle(segments: AnalyzedSegment[]): string {
+    if (segments.length === 1) {
+      return segments[0].title;
+    }
+
+    // Take the title from the highest-scoring segment
+    const highestScoringSegment = segments.reduce((prev, current) =>
+      current.informativenessScore > prev.informativenessScore ? current : prev,
+    );
+
+    return `${highestScoringSegment.title} (Combined)`;
+  }
+
+  /**
+   * Creates a combined summary from multiple segments
+   */
+  private createCombinedSummary(segments: AnalyzedSegment[]): string {
+    if (segments.length === 1) {
+      return segments[0].summary;
+    }
+
+    const summaries = segments
+      .map((s) => s.summary)
+      .filter((summary) => summary.trim());
+    return summaries.join(' ') + ' (Combined segments)';
+  }
+
+  /**
+   * Implements the RankAndFilterSegments algorithm from the specification
+   */
+  private rankAndFilterSegments(
+    optimizedSegments: OptimizedSegment[],
+    minScoreThreshold: number,
+  ): OptimizedSegment[] {
+    // Step 1: Filter segments by minimum score threshold
+    const filtered = optimizedSegments.filter(
+      (segment) => segment.aggregatedScore >= minScoreThreshold,
+    );
+
+    // Step 2: Sort by aggregated score (descending) and then by start time (ascending)
+    const ranked = filtered.sort((a, b) => {
+      if (b.aggregatedScore !== a.aggregatedScore) {
+        return b.aggregatedScore - a.aggregatedScore;
+      }
+      return this.timeToSeconds(a.startTime) - this.timeToSeconds(b.startTime);
+    });
+
+    // Step 3: Add ranking and percentile information
+    const allScores = optimizedSegments.map((s) => s.aggregatedScore);
+    return ranked.map((segment, index) => ({
+      ...segment,
+      rank: index + 1, // Assign rank position as per algorithm specification
+      extractionPriority: this.calculateExtractionPriorityWithRanking(
         segment,
-        analysisConfig,
+        index + 1,
+        allScores,
       ),
     }));
+  }
+
+  /**
+   * Calculates extraction priority with ranking considerations
+   */
+  private calculateExtractionPriorityWithRanking(
+    segment: OptimizedSegment,
+    rank: number,
+    allScores: number[],
+  ): number {
+    const percentile = this.calculatePercentile(
+      segment.aggregatedScore,
+      allScores,
+    );
+
+    // Base priority is the aggregated score
+    let priority = segment.aggregatedScore;
+
+    // Boost for top-ranked segments
+    if (rank <= 3) {
+      priority += 1;
+    }
+
+    // Boost for high percentile segments
+    if (percentile >= 90) {
+      priority += 0.5;
+    }
+
+    return Math.min(priority, 10); // Cap at 10
+  }
+
+  /**
+   * Calculates percentile rank for a score
+   */
+  private calculatePercentile(score: number, allScores: number[]): number {
+    const sortedScores = [...allScores].sort((a, b) => a - b);
+    const index = sortedScores.findIndex((s) => s >= score);
+
+    if (index === -1) {
+      return 100; // Score is higher than all others
+    }
+
+    return Math.round((index / sortedScores.length) * 100);
+  }
+
+  /**
+   * Converts time string (HH:MM:SS) to seconds
+   */
+  private timeToSeconds(timeString: string): number {
+    const parts = timeString.split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return parts[0] || 0;
   }
 
   private calculateExtractionPriority(
@@ -313,6 +620,7 @@ ${segmentsText}`;
 
   private calculateMetrics(
     analyzedSegments: AnalyzedSegment[],
+    optimizedSegments: OptimizedSegment[],
     analysisResponse: SegmentAnalysisResponse,
     processingTimeMs: number,
   ) {
@@ -328,6 +636,12 @@ ${segmentsText}`;
       poor: scores.filter((s) => s < 5).length,
     };
 
+    // Calculate optimization metrics
+    const optimizationMetrics = this.calculateOptimizationMetrics(
+      analyzedSegments,
+      optimizedSegments,
+    );
+
     return {
       totalSegmentsAnalyzed: analyzedSegments.length,
       highValueSegments,
@@ -335,6 +649,52 @@ ${segmentsText}`;
       processingTimeMs,
       averageScore,
       scoreDistribution,
+      ...optimizationMetrics,
+    };
+  }
+
+  /**
+   * Calculates Stage 3 optimization effectiveness metrics
+   */
+  private calculateOptimizationMetrics(
+    analyzedSegments: AnalyzedSegment[],
+    optimizedSegments: OptimizedSegment[],
+  ) {
+    const totalOriginalSegments = analyzedSegments.length;
+    const totalOptimizedSegments = optimizedSegments.length;
+    const segmentsReduction = totalOriginalSegments - totalOptimizedSegments;
+    const reductionPercentage =
+      totalOriginalSegments > 0
+        ? (segmentsReduction / totalOriginalSegments) * 100
+        : 0;
+
+    // Calculate average duration change
+    const originalAvgDuration =
+      analyzedSegments.reduce((sum, s) => sum + s.duration, 0) /
+      totalOriginalSegments;
+    const optimizedAvgDuration =
+      optimizedSegments.reduce((sum, s) => sum + s.duration, 0) /
+      totalOptimizedSegments;
+    const durationIncrease = optimizedAvgDuration - originalAvgDuration;
+
+    // Count combined segments
+    const combinedSegments = optimizedSegments.filter(
+      (s) => s.combinedSegmentIds.length > 1,
+    ).length;
+
+    return {
+      optimizationMetrics: {
+        segmentsReduction,
+        reductionPercentage: Math.round(reductionPercentage * 100) / 100,
+        averageDurationIncrease: Math.round(durationIncrease * 100) / 100,
+        combinedSegmentsCount: combinedSegments,
+        mergingEfficiency:
+          totalOptimizedSegments > 0
+            ? Math.round(
+                (combinedSegments / totalOptimizedSegments) * 100 * 100,
+              ) / 100
+            : 0,
+      },
     };
   }
 }
