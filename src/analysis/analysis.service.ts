@@ -218,6 +218,34 @@ ${segmentsText}`;
     originalSegments: TranscriptionSegment[],
     analysisResults: SegmentAnalysisResponse['segments'],
   ): AnalyzedSegment[] {
+    // Add null check for analysisResults
+    if (!analysisResults || !Array.isArray(analysisResults)) {
+      this.logger.warn(
+        'Analysis results are undefined or not an array, using default analysis for all segments',
+      );
+      return originalSegments.map((segment) => {
+        const analysis = this.createDefaultAnalysis(segment);
+        return {
+          segmentId: segment._id,
+          startTime: segment.startTime,
+          endTime: segment.endTime,
+          duration: segment.duration,
+          informativenessScore: analysis.informativenessScore,
+          percentileRank: 0,
+          title: this.generateSegmentTitle(segment.text),
+          summary: this.generateSegmentSummary(segment.text),
+          keyTopics: analysis.keyTopics,
+          reasoning: analysis.reasoning,
+          recommendedForExtraction: analysis.informativenessScore >= 7,
+          shouldCombineWithNext: analysis.shouldCombineWithNext,
+          combinationReason: analysis.combinationReason || undefined,
+          keywordDensity: this.calculateKeywordDensity(segment.text),
+          sentimentScore: 0,
+          technicalComplexity: 0,
+        };
+      });
+    }
+
     return originalSegments.map((segment, index) => {
       const analysis =
         analysisResults.find((a) => a.segmentId === segment._id) ||
@@ -237,7 +265,7 @@ ${segmentsText}`;
         reasoning: analysis.reasoning,
         recommendedForExtraction: analysis.informativenessScore >= 7,
         shouldCombineWithNext: analysis.shouldCombineWithNext,
-        combinationReason: analysis.combinationReason,
+        combinationReason: analysis.combinationReason || undefined,
         keywordDensity: this.calculateKeywordDensity(segment.text),
         sentimentScore: 0, // TODO: Implement sentiment analysis
         technicalComplexity: 0, // TODO: Implement complexity analysis
@@ -252,6 +280,7 @@ ${segmentsText}`;
       keyTopics: ['general'],
       reasoning: 'Default analysis - no specific analysis available',
       shouldCombineWithNext: false,
+      combinationReason: undefined,
     };
   }
 

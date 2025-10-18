@@ -69,6 +69,20 @@ export class OpenaiLlmProvider implements ILlmProvider {
 
       const parsedResponse = JSON.parse(content) as SegmentAnalysisResponse;
 
+      // Validate the response structure
+      if (!parsedResponse.segments || !Array.isArray(parsedResponse.segments)) {
+        this.logger.error(
+          'Invalid response structure: missing or invalid segments array',
+          {
+            response: parsedResponse,
+            content,
+          },
+        );
+        throw new Error(
+          'Invalid response structure: segments array is missing or invalid',
+        );
+      }
+
       this.logger.log(
         `Analysis completed. Tokens used: ${response.usage?.total_tokens || 'unknown'}`,
       );
@@ -108,7 +122,23 @@ For each segment, provide:
 4. Should Combine With Next: Whether this segment should be combined with the next one
 5. Combination Reason: If combining, explain why
 
-Respond with a JSON object containing an array of segment analyses.
+Respond with a JSON object in this exact format:
+{
+  "segments": [
+    {
+      "segmentId": "segment_0",
+      "informativenessScore": 8,
+      "keyTopics": ["topic1", "topic2"],
+      "reasoning": "This segment provides valuable insights...",
+      "shouldCombineWithNext": false,
+      "combinationReason": "optional reason if combining"
+    }
+  ],
+  "overallSummary": "Brief summary of the entire video content",
+  "mainTopics": ["main topic 1", "main topic 2"]
+}
+
+Make sure to include ALL segments in the analysis and use the exact segmentId format: "segment_0", "segment_1", etc.
     `.trim();
   }
 }

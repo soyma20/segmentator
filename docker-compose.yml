@@ -11,8 +11,20 @@ services:
       - MONGODB_URI=mongodb://segmentator-mongo:27017/segmentator
       - REDIS_HOST=segmentator-redis
       - REDIS_PORT=6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/peppy-freedom-471315-n3-6b06b3364a84.json
+      # Storage Configuration
+      - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      - UPLOAD_PATH=${UPLOAD_PATH:-./uploads}
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-}
+      - STORAGE_REGION=${STORAGE_REGION:-us-central1}
+      # Transcription Provider Configuration
+      - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-google_speech}
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      # API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/peppy-freedom-471315-n3-410aaac01f03.json
     volumes:
       - .:/app
       - /app/node_modules
