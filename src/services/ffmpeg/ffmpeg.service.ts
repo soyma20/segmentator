@@ -80,6 +80,12 @@ export class FfmpegService {
 
       const promise = new Promise<void>((resolve, reject) => {
         const duration = this.calculateDuration(timecode.start, timecode.end);
+
+        // Debug logging
+        this.logger.log(
+          `Processing segment ${index + 1}: start=${timecode.start}, end=${timecode.end}, calculated_duration=${duration}s`,
+        );
+
         if (duration <= 0) {
           this.logger.warn(
             `Invalid timecode for segment ${
@@ -91,8 +97,8 @@ export class FfmpegService {
         }
 
         ffmpeg(inputPath)
-          .setStartTime(timecode.start)
-          .setDuration(duration)
+          .seekInput(timecode.start)
+          .duration(duration)
           .output(outputPath)
           .on('end', () => {
             this.logger.log(`Segment ${outputPath} created successfully.`);
@@ -122,9 +128,14 @@ export class FfmpegService {
   }
 
   private timeToSeconds(time: string): number {
+    this.logger.log(`Converting time "${time}" to seconds`);
+
     if (!isNaN(Number(time))) {
-      return Number(time);
+      const result = Number(time);
+      this.logger.log(`Time "${time}" is a number: ${result} seconds`);
+      return result;
     }
+
     const parts = time.split(':').map(Number);
     let seconds = 0;
     if (parts.length === 3) {
@@ -132,8 +143,11 @@ export class FfmpegService {
     } else if (parts.length === 2) {
       seconds = parts[0] * 60 + parts[1];
     } else {
+      this.logger.error(`Invalid time format: ${time}`);
       throw new Error(`Invalid time format: ${time}`);
     }
+
+    this.logger.log(`Time "${time}" converted to ${seconds} seconds`);
     return seconds;
   }
 }

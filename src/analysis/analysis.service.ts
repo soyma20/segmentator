@@ -35,10 +35,10 @@ export interface AnalysisResultData {
     processingTimeMs: number;
     averageScore: number;
     scoreDistribution: {
-      excellent: number; // 9-10
-      good: number; // 7-8
-      average: number; // 5-6
-      poor: number; // 1-4
+      '9-10': number;
+      '7-8': number;
+      '4-6': number;
+      '1-3': number;
     };
     optimizationMetrics: {
       segmentsReduction: number;
@@ -300,7 +300,10 @@ ${segmentsText}`;
     this.logger.log('Starting Stage 3: Optimization and Result Formation');
 
     // Step 1: Optimize segments by merging adjacent ones
-    const optimizedSegments = this.optimizeSegmentsByMerging(analyzedSegments);
+    const optimizedSegments = this.optimizeSegmentsByMerging(
+      analyzedSegments,
+      analysisConfig,
+    );
 
     // Step 2: Rank and filter segments
     const rankedSegments = this.rankAndFilterSegments(
@@ -321,23 +324,41 @@ ${segmentsText}`;
    */
   private optimizeSegmentsByMerging(
     analyzedSegments: AnalyzedSegment[],
+    analysisConfig: ProcessingHistory['configuration']['analysisConfig'],
   ): OptimizedSegment[] {
+    this.logger.log(
+      `Starting segment optimization with maxCombinedDuration: ${analysisConfig.maxCombinedDuration}s`,
+    );
+
     const optimized: OptimizedSegment[] = [];
     let currentGroup: AnalyzedSegment[] = [];
 
     for (let i = 0; i < analyzedSegments.length; i++) {
       const segment = analyzedSegments[i];
 
-      if (this.shouldCombine(segment, currentGroup)) {
+      if (
+        this.shouldCombine(
+          segment,
+          currentGroup,
+          analysisConfig.maxCombinedDuration,
+        )
+      ) {
         currentGroup.push(segment);
+        this.logger.log(
+          `Added segment ${segment.segmentId} to group. Group size: ${currentGroup.length}`,
+        );
       } else {
         // Process the current group if it's not empty
         if (currentGroup.length > 0) {
           const combined = this.combineSegments(currentGroup);
           optimized.push(combined);
+          this.logger.log(
+            `Created optimized segment with ${currentGroup.length} segments, duration: ${combined.duration}s`,
+          );
         }
         // Start a new group with the current segment
         currentGroup = [segment];
+        this.logger.log(`Started new group with segment ${segment.segmentId}`);
       }
     }
 
@@ -345,9 +366,30 @@ ${segmentsText}`;
     if (currentGroup.length > 0) {
       const combined = this.combineSegments(currentGroup);
       optimized.push(combined);
+      this.logger.log(
+        `Created final optimized segment with ${currentGroup.length} segments, duration: ${combined.duration}s`,
+      );
     }
 
+    this.logger.log(
+      `Optimization complete. Created ${optimized.length} optimized segments from ${analyzedSegments.length} analyzed segments`,
+    );
     return optimized;
+  }
+
+  /**
+   * Calculates the total duration of a group of segments
+   */
+  private calculateGroupDuration(segments: AnalyzedSegment[]): number {
+    if (segments.length === 0) return 0;
+
+    const firstSegment = segments[0];
+    const lastSegment = segments[segments.length - 1];
+
+    return (
+      this.timeToSeconds(lastSegment.endTime) -
+      this.timeToSeconds(firstSegment.startTime)
+    );
   }
 
   /**
@@ -356,12 +398,26 @@ ${segmentsText}`;
   private shouldCombine(
     segment: AnalyzedSegment,
     currentGroup: AnalyzedSegment[],
+    maxCombinedDuration: number,
   ): boolean {
     if (currentGroup.length === 0) {
       return true; // Always start with the first segment
     }
 
     const lastSegment = currentGroup[currentGroup.length - 1];
+
+    // Check duration limit first - this is the most important constraint
+    const currentGroupDuration = this.calculateGroupDuration(currentGroup);
+    const segmentStartTime = this.timeToSeconds(segment.startTime);
+    const groupStartTime = this.timeToSeconds(currentGroup[0].startTime);
+    const totalDuration = segmentStartTime - groupStartTime + segment.duration;
+
+    if (totalDuration > maxCombinedDuration) {
+      this.logger.log(
+        `Not combining segment ${segment.segmentId}: would exceed max duration (${totalDuration}s > ${maxCombinedDuration}s)`,
+      );
+      return false;
+    }
 
     // Check if the last segment in the group recommends combining with next
     if (lastSegment.shouldCombineWithNext) {
@@ -630,10 +686,10 @@ ${segmentsText}`;
     const highValueSegments = scores.filter((score) => score >= 7).length;
 
     const scoreDistribution = {
-      excellent: scores.filter((s) => s >= 9).length,
-      good: scores.filter((s) => s >= 7 && s < 9).length,
-      average: scores.filter((s) => s >= 5 && s < 7).length,
-      poor: scores.filter((s) => s < 5).length,
+      '9-10': scores.filter((s) => s >= 9).length,
+      '7-8': scores.filter((s) => s >= 7 && s < 9).length,
+      '4-6': scores.filter((s) => s >= 4 && s < 7).length,
+      '1-3': scores.filter((s) => s < 4).length,
     };
 
     // Calculate optimization metrics

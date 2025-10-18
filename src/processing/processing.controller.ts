@@ -8,11 +8,37 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  Matches,
+} from 'class-validator';
+import { Types } from 'mongoose';
 import { ProcessingService } from './processing.service';
 
 export class TriggerClippingDto {
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^[0-9a-fA-F]{24}$/, {
+    message:
+      'analysisId must be a valid MongoDB ObjectId (24 character hex string)',
+  })
   analysisId: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(50)
   maxClips?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(10)
   minScoreThreshold?: number;
 }
 
@@ -60,6 +86,14 @@ export class ProcessingController {
   async getClippingStatus(
     @Param('analysisId') analysisId: string,
   ): Promise<ClippingJobStatus | { message: string; analysisId: string }> {
+    // Validate ObjectId format
+    if (!Types.ObjectId.isValid(analysisId)) {
+      throw new HttpException(
+        `Invalid analysis ID format: ${analysisId}. Must be a valid MongoDB ObjectId.`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const status =
       await this.processingService.getClippingJobStatus(analysisId);
 

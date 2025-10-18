@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -67,6 +67,13 @@ export class ClippingProcessor extends WorkerHost {
     const { analysisResult, maxClips = 10, minScoreThreshold = 6 } = job.data;
     const analysisId = analysisResult._id;
 
+    // Validate ObjectId format
+    if (!Types.ObjectId.isValid(analysisId)) {
+      throw new Error(
+        `Invalid analysis ID format: ${analysisId}. Must be a valid MongoDB ObjectId.`,
+      );
+    }
+
     this.logger.log(
       `Starting clipping job for analysis: ${analysisId}, maxClips: ${maxClips}, minScore: ${minScoreThreshold}`,
     );
@@ -83,12 +90,12 @@ export class ClippingProcessor extends WorkerHost {
 
       // Step 2: Get processing history and original file
       const processingHistory = await this.processingHistoryModel
-        .findOne({ fileId: analysisRecord.fileId })
+        .findById(analysisRecord.processingId)
         .exec();
 
       if (!processingHistory) {
         throw new Error(
-          `Processing history not found for file: ${String(analysisRecord.fileId)}`,
+          `Processing history not found for processing ID: ${String(analysisRecord.processingId)}`,
         );
       }
 
@@ -174,7 +181,7 @@ export class ClippingProcessor extends WorkerHost {
           .exec();
         if (analysisRecord) {
           const processingHistory = await this.processingHistoryModel
-            .findOne({ fileId: analysisRecord.fileId })
+            .findById(analysisRecord.processingId)
             .exec();
           if (processingHistory) {
             await this.updateProcessingStatus(
@@ -244,6 +251,14 @@ export class ClippingProcessor extends WorkerHost {
       start: segment.startTime,
       end: segment.endTime,
     }));
+
+    // Debug logging to see what time values we're working with
+    this.logger.log(`Generating clips for ${segments.length} segments:`);
+    segments.forEach((segment, index) => {
+      this.logger.log(
+        `Segment ${index + 1}: ${segment.startTime} - ${segment.endTime} (duration: ${segment.duration}s)`,
+      );
+    });
 
     // Generate output pattern for clips
     const outputPattern = join(outputDir, `clip_%i.mp4`);

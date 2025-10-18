@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { Types } from 'mongoose';
 import {
   ClippingJobData,
   ClippingJobResult,
@@ -26,6 +27,13 @@ export class ProcessingService {
     } = {},
   ): Promise<void> {
     const { maxClips = 10, minScoreThreshold = 6 } = options;
+
+    // Validate ObjectId format
+    if (!Types.ObjectId.isValid(analysisId)) {
+      throw new Error(
+        `Invalid analysis ID format: ${analysisId}. Must be a valid MongoDB ObjectId.`,
+      );
+    }
 
     this.logger.log(
       `Triggering clipping job for analysis ${analysisId} with maxClips: ${maxClips}, minScore: ${minScoreThreshold}`,
@@ -74,6 +82,13 @@ export class ProcessingService {
     createdAt: number;
     processedAt?: number;
   } | null> {
+    // Validate ObjectId format
+    if (!Types.ObjectId.isValid(analysisId)) {
+      throw new Error(
+        `Invalid analysis ID format: ${analysisId}. Must be a valid MongoDB ObjectId.`,
+      );
+    }
+
     const jobs = await this.clippingQueue.getJobs([
       'waiting',
       'active',
