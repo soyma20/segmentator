@@ -25,8 +25,9 @@ export class FfmpegService {
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
         .noVideo()
-        .audioCodec('libmp3lame')
-        .audioBitrate('192k')
+        .audioCodec('pcm_s16le')
+        .audioFrequency(16000)
+        .audioChannels(1)
         .save(outputPath)
         .on('end', () => {
           this.logger.log(`Conversion finished successfully: ${outputPath}`);

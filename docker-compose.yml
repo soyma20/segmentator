@@ -5,14 +5,14 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - '3000:3000'
+      - "3000:3000"
     environment:
       - NODE_ENV=development
       - MONGODB_URI=mongodb://segmentator-mongo:27017/segmentator
       - REDIS_HOST=segmentator-redis
       - REDIS_PORT=6379
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_CLOUD_CREDENTIALS=${GOOGLE_CLOUD_CREDENTIALS}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/peppy-freedom-471315-n3-6b06b3364a84.json
     volumes:
       - .:/app
       - /app/node_modules
@@ -26,7 +26,7 @@ services:
     container_name: segmentator-mongo
     image: mongo:7.0
     ports:
-      - '27017:27017'
+      - "27017:27017"
     volumes:
       - segmentator-mongo-data:/data/db
     environment:
@@ -37,7 +37,7 @@ services:
     container_name: segmentator-redis
     image: redis:7.2-alpine
     ports:
-      - '6379:6379'
+      - "6379:6379"
     volumes:
       - segmentator-redis-data:/data
     restart: unless-stopped
@@ -46,7 +46,7 @@ services:
     container_name: segmentator-mongo-express
     image: mongo-express:1.0.2
     ports:
-      - '8081:8081'
+      - "8081:8081"
     environment:
       - ME_CONFIG_MONGODB_SERVER=segmentator-mongo
       - ME_CONFIG_MONGODB_PORT=27017

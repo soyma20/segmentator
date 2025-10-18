@@ -185,24 +185,16 @@ export class FilesService {
         priority: this.getJobPriority(file.duration),
       };
 
-      const job = await this.transcriptionQueue.add(
-        'process-transcription',
-        jobData,
-        {
-          priority: jobData.priority,
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 5000,
-          },
-          removeOnComplete: 10,
-          removeOnFail: 5,
+      await this.transcriptionQueue.add('process-transcription', jobData, {
+        priority: jobData.priority,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
         },
-      );
-
-      console.log(
-        `Transcription job queued: ${job.id} for file: ${file.originalName}`,
-      );
+        removeOnComplete: 10,
+        removeOnFail: 5,
+      });
     } catch (error: unknown) {
       console.error(
         'Failed to queue transcription job:',
@@ -334,7 +326,6 @@ export class FilesService {
   }
 
   async getAllFiles(): Promise<File[]> {
-    console.log('Retrieving all files from the database');
     try {
       return await this.fileModel.find().sort({ uploadedAt: -1 }).exec();
     } catch (error: unknown) {

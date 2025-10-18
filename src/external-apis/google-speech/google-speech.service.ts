@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
 import { google } from '@google-cloud/speech/build/protos/protos';
+import { Storage } from '@google-cloud/storage';
 import { promises as fs } from 'fs';
 import { randomUUID } from 'crypto';
 import { TranscriptionSegment } from 'src/transcription/schemas/transcription-segment.schema';
@@ -9,239 +10,120 @@ import { TranscriptionSegment } from 'src/transcription/schemas/transcription-se
 export class GoogleSpeechService {
   private readonly logger = new Logger(GoogleSpeechService.name);
   private readonly speechClient: SpeechClient;
-  private readonly MAX_CHUNK_DURATION = 60; // 1 minute in seconds (what actually works with Google)
+  private readonly storage: Storage;
+  private readonly BUCKET_NAME = 'yaro-segmentator-transcripts-2025';
 
   constructor() {
     this.speechClient = new SpeechClient();
+    this.storage = new Storage(); // Assumes auth is set up via env vars
   }
 
   async transcribeAndSegmentAudio(
     filePath: string,
-    languageCode = 'en',
+    languageCode = 'en-US', // Use en-US
     sampleRateHertz = 16000,
-    segmentLength = 60, // сек
+    segmentLength = 60,
   ): Promise<TranscriptionSegment[]> {
     this.logger.log(`Starting transcription for: ${filePath}`);
+    const gcsFileName = `audio-uploads/${randomUUID()}-${Date.now()}.wav`;
 
     try {
-      const file = await fs.readFile(filePath);
-      const durationInSeconds = this.estimateDuration(
-        file.length,
+      // 1. Upload the *entire* file to GCS
+      this.logger.log(`Uploading ${filePath} to GCS as ${gcsFileName}`);
+      await this.storage.bucket(this.BUCKET_NAME).upload(filePath, {
+        destination: gcsFileName,
+      });
+
+      const gcsUri = `gs://${this.BUCKET_NAME}/${gcsFileName}`;
+
+      // 2. Transcribe using the GCS URI
+      const response = await this.transcribeAudioFromGcs(
+        gcsUri,
         sampleRateHertz,
+        languageCode,
       );
 
-      this.logger.log(`Estimated duration: ${durationInSeconds} seconds`);
-      this.logger.log(`Max chunk duration: ${this.MAX_CHUNK_DURATION} seconds`);
+      // 3. Get audio duration from the response (more accurate)
+      // Or estimate from file, but this is safer
+      const file = await fs.readFile(filePath);
+      const audioDuration = this.estimateDuration(file.length, sampleRateHertz);
 
-      let allSegments: TranscriptionSegment[] = [];
-
-      if (durationInSeconds <= this.MAX_CHUNK_DURATION) {
-        // Process as single file
-        this.logger.log('Processing as single file');
-        try {
-          const response = await this.transcribeAudioBuffer(
-            file,
-            sampleRateHertz,
-            languageCode,
-            durationInSeconds,
-          );
-          allSegments = this.createSegmentsFromResponse(
-            response,
-            durationInSeconds,
-            segmentLength,
-            0,
-          );
-        } catch (error) {
-          if (error.message?.includes('duration limit')) {
-            this.logger.warn(
-              'Single file processing failed due to duration limit, falling back to chunking...',
-            );
-            // Fallback to chunking even if duration estimate was wrong
-            const chunks = this.splitAudioIntoChunks(
-              file,
-              sampleRateHertz,
-              Math.min(this.MAX_CHUNK_DURATION / 2, 30),
-            ); // 30 seconds as fallback
-            this.logger.log(
-              `Fallback: Split audio into ${chunks.length} chunks`,
-            );
-
-            let timeOffset = 0;
-            for (let i = 0; i < chunks.length; i++) {
-              this.logger.log(
-                `Processing fallback chunk ${i + 1}/${chunks.length}`,
-              );
-
-              const chunkDuration = this.estimateDuration(
-                chunks[i].length,
-                sampleRateHertz,
-              );
-              const response = await this.transcribeAudioBuffer(
-                chunks[i],
-                sampleRateHertz,
-                languageCode,
-                chunkDuration,
-              );
-
-              const chunkSegments = this.createSegmentsFromResponse(
-                response,
-                chunkDuration,
-                segmentLength,
-                timeOffset,
-              );
-
-              allSegments.push(...chunkSegments);
-              timeOffset += chunkDuration;
-            }
-          } else {
-            throw error;
-          }
-        }
-      } else {
-        // Split audio into chunks and process each
-        this.logger.log('Processing with chunking');
-        const chunks = this.splitAudioIntoChunks(
-          file,
-          sampleRateHertz,
-          this.MAX_CHUNK_DURATION,
-        );
-        this.logger.log(`Split audio into ${chunks.length} chunks`);
-
-        let timeOffset = 0;
-        for (let i = 0; i < chunks.length; i++) {
-          this.logger.log(`Processing chunk ${i + 1}/${chunks.length}`);
-
-          const chunkDuration = this.estimateDuration(
-            chunks[i].length,
-            sampleRateHertz,
-          );
-          const response = await this.transcribeAudioBuffer(
-            chunks[i],
-            sampleRateHertz,
-            languageCode,
-            chunkDuration,
-          );
-
-          const chunkSegments = this.createSegmentsFromResponse(
-            response,
-            chunkDuration,
-            segmentLength,
-            timeOffset,
-          );
-
-          allSegments.push(...chunkSegments);
-          timeOffset += chunkDuration;
-        }
-      }
+      // 4. Create segments from the *single, complete* response
+      const allSegments = this.createSegmentsFromResponse(
+        response,
+        audioDuration,
+        segmentLength,
+        0, // No time offset needed
+      );
 
       this.logger.log(
         `Transcription completed. Generated ${allSegments.length} segments`,
       );
+
+      // 5. Clean up the file from GCS
+      this.storage
+        .bucket(this.BUCKET_NAME)
+        .file(gcsFileName)
+        .delete()
+        .catch((err) =>
+          this.logger.warn(`Failed to delete GCS file: ${gcsFileName}`, err),
+        );
+
       return allSegments;
     } catch (error) {
       this.logger.error(`Failed to transcribe audio for ${filePath}`, error);
+
+      // Clean up on failure
+      this.storage
+        .bucket(this.BUCKET_NAME)
+        .file(gcsFileName)
+        .delete()
+        .catch((err) =>
+          this.logger.warn(`Failed to delete GCS file: ${gcsFileName}`, err),
+        );
 
       let errorMessage = 'Speech-to-Text transcription failed';
       if (error.message?.includes('INVALID_ARGUMENT')) {
         errorMessage = 'Invalid audio format or configuration.';
       }
-
       throw new Error(errorMessage);
     }
   }
-
-  private async transcribeAudioBuffer(
-    audioBuffer: Buffer,
+  private async transcribeAudioFromGcs(
+    gcsUri: string,
     sampleRateHertz: number,
     languageCode: string,
-    durationInSeconds: number,
-  ): Promise<google.cloud.speech.v1.IRecognizeResponse> {
+  ): Promise<google.cloud.speech.v1.ILongRunningRecognizeResponse> {
     this.logger.log(
-      `Transcribing audio buffer: size=${audioBuffer.length} bytes, duration=${durationInSeconds}s, sampleRate=${sampleRateHertz}`,
+      `Transcribing audio from GCS: ${gcsUri}, sampleRate=${sampleRateHertz}`,
     );
 
-    // Basic validation
-    if (audioBuffer.length < 100) {
-      this.logger.warn(
-        `Audio buffer is very small: ${audioBuffer.length} bytes`,
-      );
-    }
-
-    // Check for silence by examining audio samples
-    const samples: number[] = [];
-    for (let i = 0; i < Math.min(audioBuffer.length, 1000); i += 2) {
-      const sample = audioBuffer.readInt16LE(i);
-      samples.push(Math.abs(sample));
-    }
-    const avgAmplitude = samples.reduce((a, b) => a + b, 0) / samples.length;
-    this.logger.log(
-      `Average audio amplitude in first samples: ${avgAmplitude}`,
-    );
-
-    const audioBytes = audioBuffer.toString('base64');
-    const audio = { content: audioBytes };
+    const audio = { uri: gcsUri }; // Use URI instead of content
     const config = {
       encoding: 'LINEAR16' as const,
       sampleRateHertz,
       languageCode,
       enableWordTimeOffsets: true,
-      // Add more configuration options to help with recognition
       enableAutomaticPunctuation: true,
-      model: 'default', // Try default model first
+      model: 'default',
     };
 
     this.logger.log(`Speech config: ${JSON.stringify(config)}`);
 
-    if (durationInSeconds <= 60) {
-      // Use synchronous recognition for short audio
-      const [response] = await this.speechClient.recognize({
-        audio,
-        config,
-      });
-      this.logger.log(
-        `Sync recognition completed. Results: ${response.results?.length || 0}`,
-      );
-      return response;
-    } else {
-      // Use asynchronous recognition for longer audio (but still under 10 minutes)
-      const [operation] = await this.speechClient.longRunningRecognize({
-        audio,
-        config,
-      });
-      this.logger.log(
-        'Long-running operation started, waiting for completion...',
-      );
-      const [response] = await operation.promise();
-      this.logger.log(
-        `Async recognition completed. Results: ${response.results?.length || 0}`,
-      );
-      return response;
-    }
-  }
+    // Use asynchronous recognition for long audio from GCS
+    const [operation] = await this.speechClient.longRunningRecognize({
+      audio,
+      config,
+    });
+    this.logger.log(
+      'Long-running operation started, waiting for completion...',
+    );
 
-  private splitAudioIntoChunks(
-    audioBuffer: Buffer,
-    sampleRate: number,
-    maxDurationSeconds: number,
-  ): Buffer[] {
-    const chunks: Buffer[] = [];
-    const bytesPerSample = 2; // LINEAR16 = 16 bits = 2 bytes
-    const maxBytesPerChunk = maxDurationSeconds * sampleRate * bytesPerSample;
-
-    let offset = 0;
-    while (offset < audioBuffer.length) {
-      const chunkSize = Math.min(maxBytesPerChunk, audioBuffer.length - offset);
-
-      // Ensure we split on sample boundaries (every 2 bytes for 16-bit audio)
-      const alignedChunkSize =
-        Math.floor(chunkSize / bytesPerSample) * bytesPerSample;
-
-      const chunk = audioBuffer.subarray(offset, offset + alignedChunkSize);
-      chunks.push(chunk);
-      offset += alignedChunkSize;
-    }
-
-    return chunks;
+    const [response] = await operation.promise();
+    this.logger.log(
+      `Async recognition completed. Results: ${response.results?.length || 0}`,
+    );
+    return response;
   }
 
   private createSegmentsFromResponse(
@@ -290,7 +172,6 @@ export class GoogleSpeechService {
     const allConfidences: number[] = [];
 
     response.results?.forEach((result) => {
-      console.log('result', result);
       if (result.alternatives && result.alternatives.length > 0) {
         const alt = result.alternatives[0];
         if (alt.confidence) {

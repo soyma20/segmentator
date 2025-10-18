@@ -40,8 +40,6 @@ export class TranscriptionService {
     const { fileId, segments, language, processingId } = data;
 
     try {
-      console.log('Creating transcription with segments:', segments);
-
       // Process segments and calculate additional fields
       const processedSegments = segments.map((segment, index) => ({
         _id: uuidv4(),
@@ -62,7 +60,6 @@ export class TranscriptionService {
         (sum, segment) => sum + segment.wordCount,
         0,
       );
-      console.log('Total words calculated:', totalWords);
 
       const totalSegments = processedSegments.length;
 
@@ -74,7 +71,6 @@ export class TranscriptionService {
 
       // Ensure fullText is never empty for validation
       const finalFullText = fullText || '[No speech detected in audio]';
-      console.log('Full transcription text:', finalFullText);
 
       const avgConfidence =
         processedSegments.length > 0
