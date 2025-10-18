@@ -33,7 +33,15 @@ export class TranscriptionProcessor extends WorkerHost {
   async process(
     job: Job<TranscriptionJobData>,
   ): Promise<TranscriptionJobResult> {
-    const { fileId, filePath, originalName, mimeType, duration } = job.data;
+    const {
+      fileId,
+      filePath,
+      originalName,
+      mimeType,
+      duration,
+      languageCode,
+      processingId,
+    } = job.data;
 
     this.logger.log(
       `Starting transcription job for file: ${originalName} (ID: ${fileId})`,
@@ -55,7 +63,7 @@ export class TranscriptionProcessor extends WorkerHost {
       this.logger.log(`Starting transcription: ${originalName}`);
       const segments = await this.googleSpeechService.transcribeAndSegmentAudio(
         audioFilePath,
-        'uk-UA',
+        languageCode,
         16000,
         60,
       );
@@ -66,7 +74,8 @@ export class TranscriptionProcessor extends WorkerHost {
           fileId,
           segments,
           duration,
-          language: 'uk-UA',
+          language: languageCode,
+          processingId,
         })) as TranscriptionRecord;
 
       // Step 4: Queue analysis job
@@ -93,6 +102,7 @@ export class TranscriptionProcessor extends WorkerHost {
           (await this.transcriptionService.createFailedTranscription({
             fileId,
             error: errorMessage,
+            processingId,
           })) as { _id: string };
 
         return {

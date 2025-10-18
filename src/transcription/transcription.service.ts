@@ -40,6 +40,8 @@ export class TranscriptionService {
     const { fileId, segments, language, processingId } = data;
 
     try {
+      console.log('Creating transcription with segments:', segments);
+
       // Process segments and calculate additional fields
       const processedSegments = segments.map((segment, index) => ({
         _id: uuidv4(),
@@ -48,9 +50,9 @@ export class TranscriptionService {
         startSeconds: segment.startSeconds,
         endSeconds: segment.endSeconds,
         duration: segment.endSeconds - segment.startSeconds,
-        text: segment.text,
-        wordCount: this.countWords(segment.text),
-        avgConfidence: segment.avgConfidence || 0.9, // Default if not provided
+        text: segment.text || '[No speech detected]', // Ensure text is never empty
+        wordCount: this.countWords(segment.text || ''),
+        avgConfidence: segment.avgConfidence || 0.0, // Default confidence
         speakerChange:
           index === 0 || this.detectSpeakerChange(segments[index - 1], segment),
       }));
@@ -60,11 +62,20 @@ export class TranscriptionService {
         (sum, segment) => sum + segment.wordCount,
         0,
       );
+      console.log('Total words calculated:', totalWords);
+
       const totalSegments = processedSegments.length;
+
       const fullText = processedSegments
         .map((segment) => segment.text)
+        .filter((text) => text && text !== '[No speech detected]') // Filter out placeholder text
         .join(' ')
         .trim();
+
+      // Ensure fullText is never empty for validation
+      const finalFullText = fullText || '[No speech detected in audio]';
+      console.log('Full transcription text:', finalFullText);
+
       const avgConfidence =
         processedSegments.length > 0
           ? processedSegments.reduce(
@@ -79,12 +90,12 @@ export class TranscriptionService {
           ? new Types.ObjectId(processingId)
           : undefined,
         transcriptionProvider: TranscriptionProvider.GOOGLE_SPEECH,
-        language,
+        language: language || 'en', // Use shorter language code to avoid MongoDB issues
         confidence: avgConfidence,
         segments: processedSegments,
         totalSegments,
         totalWords,
-        fullText,
+        fullText: finalFullText,
         status: TranscriptionStatus.COMPLETED,
         completedAt: new Date(),
       });
@@ -112,12 +123,12 @@ export class TranscriptionService {
           ? new Types.ObjectId(processingId)
           : undefined,
         transcriptionProvider: TranscriptionProvider.GOOGLE_SPEECH,
-        language: 'unknown',
+        language: 'en', // Use simple language code to avoid MongoDB issues
         confidence: 0,
         segments: [],
         totalSegments: 0,
         totalWords: 0,
-        fullText: '',
+        fullText: `Transcription failed: ${error}`, // Provide non-empty fullText
         status: TranscriptionStatus.FAILED,
         error,
         completedAt: new Date(),
@@ -125,7 +136,7 @@ export class TranscriptionService {
 
       const savedTranscription = await transcription.save();
       this.logger.log(
-        `Transcription created successfully: ${(savedTranscription._id as Types.ObjectId).toString()}`,
+        `Failed transcription record created: ${(savedTranscription._id as Types.ObjectId).toString()}`,
       );
 
       return savedTranscription;
@@ -169,6 +180,9 @@ export class TranscriptionService {
   }
 
   private countWords(text: string): number {
+    if (!text || text === '[No speech detected]') {
+      return 0;
+    }
     return text
       .trim()
       .split(/\s+/)

@@ -63,5 +63,4 @@ export const TranscriptionSchema = SchemaFactory.createForClass(Transcription);
 TranscriptionSchema.index({ processingId: 1 });
 TranscriptionSchema.index({ fileId: 1 });
 TranscriptionSchema.index({ status: 1 });
-TranscriptionSchema.index({ fullText: 'text', 'segments.text': 'text' });
-TranscriptionSchema.index({ language: 1, transcriptionProvider: 1 });
+// TranscriptionSchema.index({ language: 1, transcriptionProvider: 1 });

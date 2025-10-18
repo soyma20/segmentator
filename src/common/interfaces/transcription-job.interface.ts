@@ -4,6 +4,8 @@ export interface TranscriptionJobData {
   originalName: string;
   mimeType: string;
   duration: number;
+  languageCode: string;
+  processingId?: string;
   priority?: number;
 }
 

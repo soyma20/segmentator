@@ -18,6 +18,10 @@ import { FileOperationException } from 'src/common/exceptions/file-operation.exc
 import { getErrorMessage, isNodeError } from 'src/common/utils/error.utils';
 import { TranscriptionJobData } from 'src/common/interfaces/transcription-job.interface';
 import { MIMES } from 'src/common/constants/mimes.constant';
+import { UploadFileDto } from './dto/upload-file.dto';
+import { ProcessingHistory } from 'src/processing/schemas/processing-history.schema';
+import { ProcessingStatus } from 'src/common/enums/processing-status.enum';
+import { VideoType } from 'src/common/enums/video-type.enum';
 
 type VideoMetadata = {
   duration: number;
@@ -34,6 +38,8 @@ export class FilesService {
 
   constructor(
     @InjectModel(File.name) private fileModel: Model<File>,
+    @InjectModel(ProcessingHistory.name)
+    private processingHistoryModel: Model<ProcessingHistory>,
     @InjectQueue('transcription') private transcriptionQueue: Queue,
   ) {
     this.ensureUploadDirExists().catch(console.error);
@@ -56,9 +62,16 @@ export class FilesService {
     }
   }
 
-  async uploadFile(file: Express.Multer.File): Promise<File> {
+  async uploadFile(
+    file: Express.Multer.File,
+    uploadData: UploadFileDto,
+  ): Promise<{ file: File; processingHistory?: ProcessingHistory }> {
     if (!file) {
       throw new BadRequestException('No file provided');
+    }
+
+    if (!uploadData.languageCode) {
+      throw new BadRequestException('Language code is required');
     }
 
     const fileExtension = path.extname(file.originalname);
@@ -92,10 +105,25 @@ export class FilesService {
 
       const savedFile = await fileRecord.save();
 
+      let processingHistory: ProcessingHistory | undefined;
+
       if (this.isTranscribableFile(file.mimetype)) {
-        await this.queueTranscriptionJob(savedFile);
+        // Create processing history if configuration is provided
+        if (uploadData.processingConfiguration) {
+          processingHistory = await this.createProcessingHistory(
+            String(savedFile._id),
+            uploadData.processingConfiguration,
+          );
+        }
+
+        await this.queueTranscriptionJob(
+          savedFile,
+          uploadData.languageCode,
+          processingHistory ? String(processingHistory._id) : undefined,
+        );
       }
-      return savedFile;
+
+      return { file: savedFile, processingHistory };
     } catch (error: unknown) {
       await this.safeDeleteFile(filePath);
 
@@ -114,7 +142,37 @@ export class FilesService {
     }
   }
 
-  private async queueTranscriptionJob(file: File): Promise<void> {
+  private async createProcessingHistory(
+    fileId: string,
+    config: NonNullable<UploadFileDto['processingConfiguration']>,
+  ): Promise<ProcessingHistory> {
+    const processingHistory = new this.processingHistoryModel({
+      fileId: fileId,
+      processingStartedAt: new Date(),
+      processingStatus: ProcessingStatus.PENDING,
+      configuration: {
+        segmentDuration: config.segmentDuration,
+        llmProvider: config.llmProvider,
+        llmModel: config.llmModel,
+        analysisConfig: config.analysisConfig || {
+          videoType: VideoType.GENERAL,
+          focusAreas: [],
+          targetAudience: 'General audience',
+          minInformativenessScore: 0.5,
+          maxCombinedDuration: 300,
+        },
+      },
+      processing_metrics: {},
+    });
+
+    return await processingHistory.save();
+  }
+
+  private async queueTranscriptionJob(
+    file: File,
+    languageCode: string,
+    processingId?: string,
+  ): Promise<void> {
     try {
       const jobData: TranscriptionJobData = {
         fileId: file._id?.toString() || '',
@@ -122,6 +180,8 @@ export class FilesService {
         originalName: file.originalName,
         mimeType: file.mimeType,
         duration: file.duration,
+        languageCode: languageCode,
+        processingId: processingId,
         priority: this.getJobPriority(file.duration),
       };
 

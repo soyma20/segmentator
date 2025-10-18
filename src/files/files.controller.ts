@@ -7,11 +7,16 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Body,
+  ParseFilePipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
 import { FilesService } from './files.service';
 import { MIMES } from 'src/common/constants/mimes.constant';
+import { UploadFileDto } from './dto/upload-file.dto';
 
 @Controller('files')
 export class FilesController {
@@ -32,8 +37,40 @@ export class FilesController {
       },
     }),
   )
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return this.filesService.uploadFile(file);
+  async uploadFile(
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: true,
+      }),
+    )
+    file: Express.Multer.File,
+    @Body('uploadData') uploadDataString: string,
+  ) {
+    if (!uploadDataString) {
+      throw new BadRequestException('uploadData form field is required.');
+    }
+
+    let uploadData: UploadFileDto;
+
+    try {
+      const parsedData: unknown = JSON.parse(uploadDataString);
+
+      uploadData = plainToInstance(UploadFileDto, parsedData);
+    } catch {
+      throw new BadRequestException(
+        'Invalid format for uploadData. Must be a valid JSON string.',
+      );
+    }
+
+    const errors = await validate(uploadData, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+
+    return this.filesService.uploadFile(file, uploadData);
   }
 
   @Get()
