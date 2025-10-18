@@ -12,6 +12,11 @@ import {
   TranscriptionSegment,
   TranscriptionSegmentSchema,
 } from './schemas/transcription-segment.schema';
+import { File, FileSchema } from '../files/schemas/file.schema';
+import {
+  ProcessingHistory,
+  ProcessingHistorySchema,
+} from '../processing/schemas/processing-history.schema';
 import { QueuesModule } from 'src/queues/queues.module';
 import { GoogleSpeechService } from 'src/external-apis/google-speech/google-speech.service';
 import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
@@ -21,6 +26,8 @@ import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
     MongooseModule.forFeature([
       { name: Transcription.name, schema: TranscriptionSchema },
       { name: TranscriptionSegment.name, schema: TranscriptionSegmentSchema },
+      { name: File.name, schema: FileSchema },
+      { name: ProcessingHistory.name, schema: ProcessingHistorySchema },
     ]),
     QueuesModule,
     BullModule.registerQueue({
