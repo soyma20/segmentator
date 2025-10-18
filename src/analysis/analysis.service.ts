@@ -407,7 +407,6 @@ ${segmentsText}`;
     const lastSegment = currentGroup[currentGroup.length - 1];
 
     // Check duration limit first - this is the most important constraint
-    const currentGroupDuration = this.calculateGroupDuration(currentGroup);
     const segmentStartTime = this.timeToSeconds(segment.startTime);
     const groupStartTime = this.timeToSeconds(currentGroup[0].startTime);
     const totalDuration = segmentStartTime - groupStartTime + segment.duration;

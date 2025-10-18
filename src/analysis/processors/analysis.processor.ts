@@ -189,7 +189,7 @@ export class AnalysisProcessor extends WorkerHost {
 
       if (highValueSegments.length === 0) {
         this.logger.log(
-          `No high-value segments found for auto-clipping. Skipping automatic clipping for analysis: ${analysisResult._id}`,
+          `No high-value segments found for auto-clipping. Skipping automatic clipping for analysis: ${String(analysisResult._id)}`,
         );
         return;
       }
@@ -220,11 +220,11 @@ export class AnalysisProcessor extends WorkerHost {
       );
 
       this.logger.log(
-        `Auto-clipping job queued successfully for analysis: ${analysisResult._id} with ${highValueSegments.length} high-value segments`,
+        `Auto-clipping job queued successfully for analysis: ${String(analysisResult._id)} with ${highValueSegments.length} high-value segments`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to queue auto-clipping job for analysis: ${analysisResult._id}`,
+        `Failed to queue auto-clipping job for analysis: ${String(analysisResult._id)}`,
         getErrorMessage(error),
       );
       // Don't throw the error - we don't want to fail the analysis if clipping fails
