@@ -207,13 +207,13 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(3);
-      // With 90 second limit, segments should not combine (60 + 60 = 120 > 90)
+      expect(result).toHaveLength(2);
+      // With 90 second limit, segments 1 and 2 cannot combine (60 + 60 = 120 > 90)
+      // But segments 2 and 3 can combine (60 + 30 = 90 <= 90) due to shouldCombineWithNext flag
       expect(result[0].combinedSegmentIds).toEqual(['segment_1']);
       expect(result[0].duration).toBe(60);
-      expect(result[1].combinedSegmentIds).toEqual(['segment_2']);
-      expect(result[1].duration).toBe(60);
-      expect(result[2].combinedSegmentIds).toEqual(['segment_3']);
+      expect(result[1].combinedSegmentIds).toEqual(['segment_2', 'segment_3']);
+      expect(result[1].duration).toBe(90);
     });
 
     it('should process segments with overlapping key topics', () => {

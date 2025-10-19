@@ -15,10 +15,37 @@ import { FileOperationException } from '../common/exceptions/file-operation.exce
 import { LlmProvider } from '../common/enums/llm-provider.enum';
 import { VideoType } from '../common/enums/video-type.enum';
 
+// Mock fluent-ffmpeg
+jest.mock('fluent-ffmpeg', () => ({
+  ffprobe: jest.fn(
+    (filePath: string, callback: (err: unknown, data: unknown) => void) => {
+      // Mock successful metadata response
+      callback(null, {
+        format: {
+          duration: 120,
+          format_name: 'mp4',
+        },
+        streams: [
+          {
+            codec_type: 'video',
+            codec_name: 'h264',
+            width: 1920,
+            height: 1080,
+            r_frame_rate: '30/1',
+          },
+          {
+            codec_type: 'audio',
+            codec_name: 'aac',
+          },
+        ],
+      });
+    },
+  ),
+}));
+
 describe('FilesService', () => {
   let service: FilesService;
   let mockFileModel: jest.Mocked<Model<File>>;
-  let mockProcessingHistoryModel: jest.Mocked<Model<ProcessingHistory>>;
   let mockTranscriptionQueue: jest.Mocked<Queue>;
   let mockStorageService: jest.Mocked<StorageService>;
 
@@ -56,12 +83,42 @@ describe('FilesService', () => {
   };
 
   beforeEach(async () => {
-    const mockModelInstance = {
-      save: jest.fn(),
-    };
+    const mockFileModelInstance = jest
+      .fn()
+      .mockImplementation((data: unknown) => ({
+        ...(typeof data === 'object' && data !== null ? data : {}),
+        save: jest.fn().mockResolvedValue({
+          ...(typeof data === 'object' && data !== null ? data : {}),
+          _id: 'file-id', // Generate _id when save is called
+          originalName: 'test-video.mp4',
+          filePath: '/uploads/test-video.mp4',
+          mimeType: 'video/mp4',
+          duration: 120,
+        }),
+      }));
 
-    const mockModel = jest.fn().mockImplementation(() => mockModelInstance);
-    Object.assign(mockModel, {
+    Object.assign(mockFileModelInstance, {
+      findById: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      exec: jest.fn(),
+      find: jest.fn(),
+      findByIdAndDelete: jest.fn(),
+      sort: jest.fn(),
+    });
+
+    const mockProcessingHistoryModelInstance = jest
+      .fn()
+      .mockImplementation((data: unknown) => ({
+        ...(typeof data === 'object' && data !== null ? data : {}),
+        save: jest.fn().mockResolvedValue({
+          ...(typeof data === 'object' && data !== null ? data : {}),
+          _id: 'processing-id', // Generate _id when save is called
+        }),
+      }));
+
+    Object.assign(mockProcessingHistoryModelInstance, {
       findById: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
@@ -86,11 +143,11 @@ describe('FilesService', () => {
         FilesService,
         {
           provide: getModelToken(File.name),
-          useValue: mockModel,
+          useValue: mockFileModelInstance,
         },
         {
           provide: getModelToken(ProcessingHistory.name),
-          useValue: mockModel,
+          useValue: mockProcessingHistoryModelInstance,
         },
         {
           provide: 'BullQueue_transcription',
@@ -105,9 +162,6 @@ describe('FilesService', () => {
 
     service = module.get<FilesService>(FilesService);
     mockFileModel = module.get(getModelToken(File.name));
-    mockProcessingHistoryModel = module.get(
-      getModelToken(ProcessingHistory.name),
-    );
     mockTranscriptionQueue = module.get('BullQueue_transcription');
     mockStorageService = module.get(StorageService);
   });
@@ -123,7 +177,38 @@ describe('FilesService', () => {
         storageType: 'local',
       };
 
-      const mockSavedFile = {
+      mockStorageService.uploadFile.mockResolvedValue(mockUploadResult);
+      mockTranscriptionQueue.add.mockResolvedValue({} as never);
+
+      const result = await service.uploadFile(mockFile, mockUploadData);
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(mockStorageService.uploadFile).toHaveBeenCalledWith(mockFile);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(mockTranscriptionQueue.add).toHaveBeenCalledWith(
+        'process-transcription',
+        expect.objectContaining({
+          fileId: 'file-id',
+          filePath: '/uploads/test-video.mp4',
+          originalName: 'test-video.mp4',
+          mimeType: 'video/mp4',
+          duration: 120,
+          languageCode: 'en-US',
+          processingId: 'processing-id',
+          priority: 5,
+        }),
+        expect.objectContaining({
+          priority: 5,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        }),
+      );
+      expect(result.file).toMatchObject({
         _id: 'file-id',
         originalName: 'test-video.mp4',
         storedName: 'test-video.mp4',
@@ -132,70 +217,22 @@ describe('FilesService', () => {
         fileSize: 1024000,
         duration: 120,
         format: 'mp4',
-        uploadedAt: new Date(),
+        uploadedAt: expect.any(Date) as Date,
         totalProcessingRuns: 0,
-        save: jest.fn().mockResolvedValue({
-          _id: 'file-id',
-          originalName: 'test-video.mp4',
-          storedName: 'test-video.mp4',
-          filePath: '/uploads/test-video.mp4',
-          mimeType: 'video/mp4',
-          fileSize: 1024000,
-          duration: 120,
-          format: 'mp4',
-          uploadedAt: new Date(),
-          totalProcessingRuns: 0,
-        }),
-      };
-
-      const mockProcessingHistory = {
+      });
+      expect(result.processingHistory).toMatchObject({
         _id: 'processing-id',
         fileId: 'file-id',
-        processingStartedAt: new Date(),
+        processingStartedAt: expect.any(Date) as Date,
         processingStatus: 'pending',
         configuration: mockUploadData.processingConfiguration,
         processing_metrics: {},
-        save: jest.fn().mockResolvedValue({ _id: 'processing-id' }),
-      };
-
-      mockStorageService.uploadFile.mockResolvedValue(mockUploadResult);
-      // Mock the save method on the file model instance
-      const fileModelInstance = new mockFileModel();
-      (fileModelInstance.save as jest.Mock).mockResolvedValue(mockSavedFile);
-
-      // Mock the save method on the processing history model instance
-      const processingHistoryModelInstance = new mockProcessingHistoryModel();
-      (processingHistoryModelInstance.save as jest.Mock).mockResolvedValue(
-        mockProcessingHistory,
-      );
-
-      mockTranscriptionQueue.add.mockResolvedValue({} as any);
-
-      const result = await service.uploadFile(mockFile, mockUploadData);
-
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockStorageService.uploadFile).toHaveBeenCalledWith(mockFile);
-      expect(mockFileModel).toHaveBeenCalled();
-      expect(mockProcessingHistoryModel).toHaveBeenCalled();
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockTranscriptionQueue.add).toHaveBeenCalledWith(
-        'process-transcription',
-        expect.objectContaining({
-          fileId: 'file-id',
-          filePath: '/uploads/test-video.mp4',
-          languageCode: 'en-US',
-        }),
-        expect.any(Object),
-      );
-      expect(result).toEqual({
-        file: mockSavedFile,
-        processingHistory: mockProcessingHistory,
       });
     });
 
     it('should throw BadRequestException when no file provided', async () => {
       await expect(
-        service.uploadFile(null as any, mockUploadData),
+        service.uploadFile(null as never, mockUploadData),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -217,21 +254,8 @@ describe('FilesService', () => {
         storageType: 'local',
       };
 
-      const mockSavedFile = {
-        _id: 'file-id',
-        originalName: 'test-video.mp4',
-        save: jest.fn().mockResolvedValue({
-          _id: 'file-id',
-          originalName: 'test-video.mp4',
-        }),
-      };
-
       mockStorageService.uploadFile.mockResolvedValue(mockUploadResult);
-      // Mock the save method on the file model instance
-      const fileModelInstance = new mockFileModel();
-      (fileModelInstance.save as jest.Mock).mockResolvedValue(mockSavedFile);
-
-      mockTranscriptionQueue.add.mockResolvedValue({} as any);
+      mockTranscriptionQueue.add.mockResolvedValue({} as never);
 
       const result = await service.uploadFile(
         mockFile,
@@ -239,14 +263,29 @@ describe('FilesService', () => {
       );
 
       expect(result.processingHistory).toBeUndefined();
-      expect(mockFileModel).toHaveBeenCalled();
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockTranscriptionQueue.add).toHaveBeenCalledWith(
         'process-transcription',
         expect.objectContaining({
+          fileId: 'file-id',
+          filePath: '/uploads/test-video.mp4',
+          originalName: 'test-video.mp4',
+          mimeType: 'video/mp4',
+          duration: 120,
+          languageCode: 'en-US',
           processingId: undefined,
+          priority: 5,
         }),
-        expect.any(Object),
+        expect.objectContaining({
+          priority: 5,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000,
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        }),
       );
     });
 
@@ -268,7 +307,7 @@ describe('FilesService', () => {
 
       mockFileModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(mockFile),
-      } as any);
+      } as never);
 
       const result = await service.getFileById(fileId);
 
@@ -282,7 +321,7 @@ describe('FilesService', () => {
 
       mockFileModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
-      } as any);
+      } as never);
 
       await expect(service.getFileById(fileId)).rejects.toThrow(
         BadRequestException,
@@ -294,7 +333,7 @@ describe('FilesService', () => {
 
       mockFileModel.findById.mockReturnValue({
         exec: jest.fn().mockRejectedValue(new Error('Database error')),
-      } as any);
+      } as never);
 
       await expect(service.getFileById(fileId)).rejects.toThrow(
         InternalServerErrorException,
@@ -310,8 +349,8 @@ describe('FilesService', () => {
         filePath: '/uploads/test-video.mp4',
       };
 
-      mockFileModel.findById.mockResolvedValue(mockFile as any);
-      mockFileModel.findByIdAndDelete.mockResolvedValue(mockFile as any);
+      mockFileModel.findById.mockResolvedValue(mockFile as never);
+      mockFileModel.findByIdAndDelete.mockResolvedValue(mockFile as never);
 
       await service.deleteFile(fileId);
 
@@ -338,7 +377,7 @@ describe('FilesService', () => {
         filePath: '/uploads/test-video.mp4',
       };
 
-      mockFileModel.findById.mockResolvedValue(mockFile as any);
+      mockFileModel.findById.mockResolvedValue(mockFile as never);
       mockFileModel.findByIdAndDelete.mockRejectedValue(
         new Error('Delete error'),
       );
@@ -361,13 +400,12 @@ describe('FilesService', () => {
         exec: jest.fn().mockResolvedValue(mockFiles),
       };
 
-      mockFileModel.find.mockReturnValue(mockQuery as any);
+      mockFileModel.find.mockReturnValue(mockQuery as never);
 
       const result = await service.getAllFiles();
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockFileModel.find).toHaveBeenCalled();
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockQuery.sort).toHaveBeenCalledWith({ uploadedAt: -1 });
       expect(result).toEqual(mockFiles);
     });
@@ -378,7 +416,7 @@ describe('FilesService', () => {
         exec: jest.fn().mockRejectedValue(new Error('Database error')),
       };
 
-      mockFileModel.find.mockReturnValue(mockQuery as any);
+      mockFileModel.find.mockReturnValue(mockQuery as never);
 
       await expect(service.getAllFiles()).rejects.toThrow(
         InternalServerErrorException,
@@ -389,63 +427,85 @@ describe('FilesService', () => {
   describe('private methods', () => {
     describe('getJobPriority', () => {
       it('should return priority 1 for files less than 1 minute', () => {
-        const priority = (service as any).getJobPriority(30); // 30 seconds
+        const priority = (
+          service as never as { getJobPriority(duration: number): number }
+        ).getJobPriority(30); // 30 seconds
         expect(priority).toBe(1);
       });
 
       it('should return priority 5 for files less than 5 minutes', () => {
-        const priority = (service as any).getJobPriority(180); // 3 minutes
+        const priority = (
+          service as never as { getJobPriority(duration: number): number }
+        ).getJobPriority(180); // 3 minutes
         expect(priority).toBe(5);
       });
 
       it('should return priority 10 for files less than 30 minutes', () => {
-        const priority = (service as any).getJobPriority(1200); // 20 minutes
+        const priority = (
+          service as never as { getJobPriority(duration: number): number }
+        ).getJobPriority(1200); // 20 minutes
         expect(priority).toBe(10);
       });
 
       it('should return priority 15 for files 30+ minutes', () => {
-        const priority = (service as any).getJobPriority(2400); // 40 minutes
+        const priority = (
+          service as never as { getJobPriority(duration: number): number }
+        ).getJobPriority(2400); // 40 minutes
         expect(priority).toBe(15);
       });
     });
 
     describe('isTranscribableFile', () => {
       it('should return true for video files', () => {
-        const result = (service as any).isTranscribableFile('video/mp4');
+        const result = (
+          service as never as { isTranscribableFile(mimeType: string): boolean }
+        ).isTranscribableFile('video/mp4');
         expect(result).toBe(true);
       });
 
       it('should return true for audio files', () => {
-        const result = (service as any).isTranscribableFile('audio/mp3');
+        const result = (
+          service as never as { isTranscribableFile(mimeType: string): boolean }
+        ).isTranscribableFile('audio/mp3');
         expect(result).toBe(true);
       });
 
       it('should return false for unsupported files', () => {
-        const result = (service as any).isTranscribableFile('image/jpeg');
+        const result = (
+          service as never as { isTranscribableFile(mimeType: string): boolean }
+        ).isTranscribableFile('image/jpeg');
         expect(result).toBe(false);
       });
     });
 
     describe('isVideoFile', () => {
       it('should return true for video mime types', () => {
-        const result = (service as any).isVideoFile('video/mp4');
+        const result = (
+          service as never as { isVideoFile(mimeType: string): boolean }
+        ).isVideoFile('video/mp4');
         expect(result).toBe(true);
       });
 
       it('should return false for non-video mime types', () => {
-        const result = (service as any).isVideoFile('audio/mp3');
+        const result = (
+          service as never as { isVideoFile(mimeType: string): boolean }
+        ).isVideoFile('audio/mp3');
         expect(result).toBe(false);
       });
     });
 
     describe('getFileFormat', () => {
       it('should extract file extension correctly', () => {
-        const result = (service as any).getFileFormat('test-video.mp4');
+        const result = (
+          service as never as { getFileFormat(filename: string): string }
+        ).getFileFormat('test-video.mp4');
         expect(result).toBe('mp4');
       });
 
       it('should handle files without extension', () => {
-        const result = (service as any).getFileFormat('testfile');
+        const result = (
+          service as never as { getFileFormat(filename: string): string }
+        ).getFileFormat('testfile');
         expect(result).toBe('');
       });
     });
