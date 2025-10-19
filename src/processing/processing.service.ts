@@ -30,6 +30,7 @@ export class ProcessingService {
     options: {
       maxClips?: number;
       minScoreThreshold?: number;
+      maxCombinedDuration?: number;
     } = {},
   ): Promise<void> {
     // Validate ObjectId format
@@ -60,9 +61,12 @@ export class ProcessingService {
     const minScoreThreshold =
       options.minScoreThreshold ??
       processingHistory.configuration.clippingConfig.minScoreThreshold;
+    const maxCombinedDuration =
+      options.maxCombinedDuration ??
+      processingHistory.configuration.analysisConfig.maxCombinedDuration;
 
     this.logger.log(
-      `Triggering clipping job for analysis ${analysisId} with maxClips: ${maxClips}, minScore: ${minScoreThreshold}`,
+      `Triggering clipping job for analysis ${analysisId} with maxClips: ${maxClips}, minScore: ${minScoreThreshold}, maxCombinedDuration: ${maxCombinedDuration}`,
     );
 
     // Log if override values are being used
@@ -76,6 +80,11 @@ export class ProcessingService {
         `Using override minScoreThreshold: ${options.minScoreThreshold} (config: ${processingHistory.configuration.clippingConfig.minScoreThreshold})`,
       );
     }
+    if (options.maxCombinedDuration !== undefined) {
+      this.logger.log(
+        `Using override maxCombinedDuration: ${options.maxCombinedDuration} (config: ${processingHistory.configuration.analysisConfig.maxCombinedDuration})`,
+      );
+    }
 
     try {
       await this.clippingQueue.add(
@@ -84,6 +93,7 @@ export class ProcessingService {
           analysisResult: { _id: analysisId },
           maxClips,
           minScoreThreshold,
+          maxCombinedDuration,
         },
         {
           attempts: 3,

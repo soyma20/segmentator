@@ -40,6 +40,12 @@ export class TriggerClippingDto {
   @Min(1)
   @Max(10)
   minScoreThreshold?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(600)
+  maxCombinedDuration?: number;
 }
 
 interface ClippingJobStatus {
@@ -66,6 +72,7 @@ export class ProcessingController {
       await this.processingService.triggerClippingJob(dto.analysisId, {
         maxClips: dto.maxClips,
         minScoreThreshold: dto.minScoreThreshold,
+        maxCombinedDuration: dto.maxCombinedDuration,
       });
 
       return {

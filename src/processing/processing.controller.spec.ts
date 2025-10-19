@@ -55,6 +55,7 @@ describe('ProcessingController', () => {
       analysisId: mockAnalysisId,
       maxClips: 5,
       minScoreThreshold: 7,
+      maxCombinedDuration: 180,
     };
 
     it('should trigger clipping job successfully', async () => {
@@ -67,6 +68,7 @@ describe('ProcessingController', () => {
         {
           maxClips: validDto.maxClips,
           minScoreThreshold: validDto.minScoreThreshold,
+          maxCombinedDuration: validDto.maxCombinedDuration,
         },
       );
 
@@ -90,6 +92,7 @@ describe('ProcessingController', () => {
         {
           maxClips: undefined,
           minScoreThreshold: undefined,
+          maxCombinedDuration: undefined,
         },
       );
 
@@ -114,6 +117,32 @@ describe('ProcessingController', () => {
         {
           maxClips: 3,
           minScoreThreshold: undefined,
+          maxCombinedDuration: undefined,
+        },
+      );
+
+      expect(result).toEqual({
+        message: 'Clipping job triggered successfully',
+        analysisId: partialDto.analysisId,
+      });
+    });
+
+    it('should trigger clipping job with only maxCombinedDuration', async () => {
+      const partialDto: TriggerClippingDto = {
+        analysisId: mockAnalysisId,
+        maxCombinedDuration: 240,
+      };
+
+      processingService.triggerClippingJob.mockResolvedValue(undefined);
+
+      const result = await controller.triggerClipping(partialDto);
+
+      expect(processingService.triggerClippingJob).toHaveBeenCalledWith(
+        partialDto.analysisId,
+        {
+          maxClips: undefined,
+          minScoreThreshold: undefined,
+          maxCombinedDuration: 240,
         },
       );
 
@@ -138,6 +167,7 @@ describe('ProcessingController', () => {
         {
           maxClips: undefined,
           minScoreThreshold: 8,
+          maxCombinedDuration: undefined,
         },
       );
 

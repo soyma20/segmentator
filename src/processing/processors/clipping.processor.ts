@@ -20,6 +20,7 @@ export interface ClippingJobData {
   };
   maxClips?: number;
   minScoreThreshold?: number;
+  maxCombinedDuration?: number;
 }
 
 export interface ClippingJobResult {
@@ -64,7 +65,12 @@ export class ClippingProcessor extends WorkerHost {
   }
 
   async process(job: Job<ClippingJobData>): Promise<ClippingJobResult> {
-    const { analysisResult, maxClips = 10, minScoreThreshold = 6 } = job.data;
+    const {
+      analysisResult,
+      maxClips = 10,
+      minScoreThreshold = 6,
+      maxCombinedDuration,
+    } = job.data;
     const analysisId = analysisResult._id;
 
     // Validate ObjectId format
@@ -75,7 +81,7 @@ export class ClippingProcessor extends WorkerHost {
     }
 
     this.logger.log(
-      `Starting clipping job for analysis: ${analysisId}, maxClips: ${maxClips}, minScore: ${minScoreThreshold}`,
+      `Starting clipping job for analysis: ${analysisId}, maxClips: ${maxClips}, minScore: ${minScoreThreshold}, maxCombinedDuration: ${maxCombinedDuration || 'from config'}`,
     );
 
     try {
@@ -116,9 +122,21 @@ export class ClippingProcessor extends WorkerHost {
         'Video clipping started',
       );
 
-      // Step 4: Filter and prepare segments for clipping
+      // Step 4: Re-optimize segments if maxCombinedDuration override is provided
+      let segmentsToUse = analysisRecord.optimizedSegments;
+      if (maxCombinedDuration !== undefined) {
+        this.logger.log(
+          `Re-optimizing segments with override maxCombinedDuration: ${maxCombinedDuration}s`,
+        );
+        segmentsToUse = this.reoptimizeSegmentsWithDuration(
+          analysisRecord.optimizedSegments,
+          maxCombinedDuration,
+        );
+      }
+
+      // Step 5: Filter and prepare segments for clipping
       const segmentsToClip = this.prepareSegmentsForClipping(
-        analysisRecord.optimizedSegments,
+        segmentsToUse,
         maxClips,
         minScoreThreshold,
       );
@@ -314,6 +332,150 @@ export class ClippingProcessor extends WorkerHost {
   /**
    * Updates processing status in the database
    */
+  /**
+   * Re-optimizes segments with a new maxCombinedDuration constraint
+   * This allows overriding the original analysis configuration
+   */
+  private reoptimizeSegmentsWithDuration(
+    optimizedSegments: OptimizedSegment[],
+    maxCombinedDuration: number,
+  ): OptimizedSegment[] {
+    this.logger.log(
+      `Re-optimizing ${optimizedSegments.length} segments with maxCombinedDuration: ${maxCombinedDuration}s`,
+    );
+
+    const reoptimized: OptimizedSegment[] = [];
+    let currentGroup: OptimizedSegment[] = [];
+
+    for (let i = 0; i < optimizedSegments.length; i++) {
+      const segment = optimizedSegments[i];
+
+      if (
+        this.shouldCombineSegment(segment, currentGroup, maxCombinedDuration)
+      ) {
+        currentGroup.push(segment);
+        this.logger.log(
+          `Added segment ${segment._id} to group. Group size: ${currentGroup.length}`,
+        );
+      } else {
+        // Process the current group if it's not empty
+        if (currentGroup.length > 0) {
+          const combined = this.combineOptimizedSegments(currentGroup);
+          reoptimized.push(combined);
+          this.logger.log(
+            `Created re-optimized segment with ${currentGroup.length} segments, duration: ${combined.duration}s`,
+          );
+        }
+        // Start a new group with the current segment
+        currentGroup = [segment];
+        this.logger.log(`Started new group with segment ${segment._id}`);
+      }
+    }
+
+    // Process the last group if it exists
+    if (currentGroup.length > 0) {
+      const combined = this.combineOptimizedSegments(currentGroup);
+      reoptimized.push(combined);
+      this.logger.log(
+        `Created final re-optimized segment with ${currentGroup.length} segments, duration: ${combined.duration}s`,
+      );
+    }
+
+    this.logger.log(
+      `Re-optimization complete. Created ${reoptimized.length} segments from ${optimizedSegments.length} original segments`,
+    );
+    return reoptimized;
+  }
+
+  /**
+   * Determines if a segment should be combined with the current group based on duration constraint
+   */
+  private shouldCombineSegment(
+    segment: OptimizedSegment,
+    currentGroup: OptimizedSegment[],
+    maxCombinedDuration: number,
+  ): boolean {
+    if (currentGroup.length === 0) {
+      return true; // Always start with the first segment
+    }
+
+    // Calculate total duration if we add this segment
+    const currentDuration = this.calculateOptimizedGroupDuration(currentGroup);
+    const newTotalDuration = currentDuration + segment.duration;
+
+    if (newTotalDuration > maxCombinedDuration) {
+      this.logger.log(
+        `Not combining segment ${segment._id}: would exceed max duration (${newTotalDuration}s > ${maxCombinedDuration}s)`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Calculates the total duration of a group of optimized segments
+   */
+  private calculateOptimizedGroupDuration(
+    segments: OptimizedSegment[],
+  ): number {
+    if (segments.length === 0) return 0;
+    return segments.reduce((total, segment) => total + segment.duration, 0);
+  }
+
+  /**
+   * Combines multiple optimized segments into a single segment
+   */
+  private combineOptimizedSegments(
+    segments: OptimizedSegment[],
+  ): OptimizedSegment {
+    if (segments.length === 1) {
+      return segments[0];
+    }
+
+    const firstSegment = segments[0];
+    const lastSegment = segments[segments.length - 1];
+
+    // Calculate combined duration
+    const totalDuration = this.calculateOptimizedGroupDuration(segments);
+
+    // Calculate weighted average score
+    const totalScore = segments.reduce(
+      (sum, segment) => sum + segment.aggregatedScore * segment.duration,
+      0,
+    );
+    const weightedScore = totalScore / totalDuration;
+
+    // Combine all segment IDs
+    const combinedSegmentIds = segments.flatMap(
+      (segment) => segment.combinedSegmentIds,
+    );
+
+    // Combine titles and summaries
+    const combinedTitle = segments.map((s) => s.finalTitle).join(' | ');
+    const combinedSummary = segments.map((s) => s.finalSummary).join(' ');
+
+    // Combine key topics (remove duplicates)
+    const allKeyTopics = segments.flatMap((s) => s.finalKeyTopics);
+    const uniqueKeyTopics = Array.from(new Set(allKeyTopics));
+
+    return {
+      _id: `${firstSegment._id}_combined_${segments.length}`,
+      startTime: firstSegment.startTime,
+      endTime: lastSegment.endTime,
+      duration: totalDuration,
+      combinedSegmentIds,
+      aggregatedScore: weightedScore,
+      finalTitle: combinedTitle,
+      finalSummary: combinedSummary,
+      finalKeyTopics: uniqueKeyTopics,
+      extractionPriority: Math.max(
+        ...segments.map((s) => s.extractionPriority),
+      ),
+      rank: Math.min(...segments.map((s) => s.rank)),
+    };
+  }
+
   private async updateProcessingStatus(
     processingId: string,
     stage: string,
