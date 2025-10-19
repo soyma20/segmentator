@@ -35,6 +35,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
       '@typescript-eslint/require-await': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
     },
   },
 );
