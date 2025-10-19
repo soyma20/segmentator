@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsArray,
   IsOptional,
+  IsNotEmpty,
   Min,
   Max,
 } from 'class-validator';
@@ -65,6 +66,7 @@ export class ProcessingConfigurationDto {
 
 export class UploadFileDto {
   @IsString()
+  @IsNotEmpty()
   languageCode: string;
 
   @IsOptional()

@@ -428,21 +428,30 @@ ${segmentsText}`;
 
     const lastSegment = currentGroup[currentGroup.length - 1];
 
-    // Check duration limit first - this is the most important constraint
-    const segmentStartTime = this.timeToSeconds(segment.startTime);
-    const groupStartTime = this.timeToSeconds(currentGroup[0].startTime);
-    const totalDuration = segmentStartTime - groupStartTime + segment.duration;
+    // Check if the last segment in the group recommends combining with next
+    if (lastSegment.shouldCombineWithNext) {
+      // Still need to check duration constraint
+      const groupDuration = this.calculateGroupDuration(currentGroup);
+      const totalDuration = groupDuration + segment.duration;
+
+      if (totalDuration > maxCombinedDuration) {
+        this.logger.log(
+          `Not combining segment ${segment.segmentId}: would exceed max duration (${totalDuration}s > ${maxCombinedDuration}s) despite shouldCombineWithNext flag`,
+        );
+        return false;
+      }
+      return true;
+    }
+
+    // Check duration constraint for all other combination criteria
+    const groupDuration = this.calculateGroupDuration(currentGroup);
+    const totalDuration = groupDuration + segment.duration;
 
     if (totalDuration > maxCombinedDuration) {
       this.logger.log(
         `Not combining segment ${segment.segmentId}: would exceed max duration (${totalDuration}s > ${maxCombinedDuration}s)`,
       );
       return false;
-    }
-
-    // Check if the last segment in the group recommends combining with next
-    if (lastSegment.shouldCombineWithNext) {
-      return true;
     }
 
     // Additional criteria for combination:

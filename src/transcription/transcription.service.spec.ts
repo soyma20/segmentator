@@ -12,6 +12,7 @@ import { TranscriptionProvider } from '../common/enums/transcription-provider.en
 describe('TranscriptionService', () => {
   let service: TranscriptionService;
   let mockTranscriptionModel: jest.Mocked<Model<Transcription>>;
+  let mockTranscriptionInstance: any;
 
   const mockTranscriptionData = {
     fileId: '507f1f77bcf86cd799439011',
@@ -59,17 +60,35 @@ describe('TranscriptionService', () => {
       updateOne: jest.fn(),
     };
 
-    // Mock the constructor to return an object with save method
-    const mockTranscriptionConstructor = jest.fn().mockImplementation(() => ({
-      save: jest.fn().mockResolvedValue({ _id: 'mock-id' }),
-    }));
+    // Create mock instance with save method
+    mockTranscriptionInstance = {
+      save: jest.fn(),
+    };
+
+    // Create mock model class
+    const mockTranscriptionModelClass = jest
+      .fn()
+      .mockImplementation(() => mockTranscriptionInstance);
+
+    // Add static methods to the mock class
+    Object.assign(mockTranscriptionModelClass, {
+      findOne: jest.fn().mockReturnValue({
+        exec: jest.fn(),
+      }),
+      findById: jest.fn().mockReturnValue({
+        exec: jest.fn(),
+      }),
+      updateOne: jest.fn().mockReturnValue({
+        exec: jest.fn(),
+      }),
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TranscriptionService,
         {
           provide: getModelToken(Transcription.name),
-          useValue: mockTranscriptionConstructor,
+          useValue: mockTranscriptionModelClass,
         },
         {
           provide: getModelToken(TranscriptionSegment.name),
@@ -103,10 +122,8 @@ describe('TranscriptionService', () => {
         completedAt: expect.any(Date),
       };
 
-      // Mock the save method on the constructor's prototype
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockResolvedValue(mockSavedTranscription);
+      // Mock the save method on the instance
+      mockTranscriptionInstance.save.mockResolvedValue(mockSavedTranscription);
 
       const result = await service.createTranscription(mockTranscriptionData);
 
@@ -137,10 +154,8 @@ describe('TranscriptionService', () => {
         completedAt: expect.any(Date),
       };
 
-      // Mock the save method on the constructor's prototype
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockResolvedValue(mockSavedTranscription);
+      // Mock the save method on the instance
+      mockTranscriptionInstance.save.mockResolvedValue(mockSavedTranscription);
 
       const result = await service.createTranscription(emptySegmentsData);
 
@@ -182,10 +197,8 @@ describe('TranscriptionService', () => {
         completedAt: expect.any(Date),
       };
 
-      // Mock the save method on the constructor's prototype
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockResolvedValue(mockSavedTranscription);
+      // Mock the save method on the instance
+      mockTranscriptionInstance.save.mockResolvedValue(mockSavedTranscription);
 
       const result = await service.createTranscription(noTextSegmentsData);
 
@@ -195,9 +208,7 @@ describe('TranscriptionService', () => {
 
     it('should throw error when save fails', async () => {
       const error = new Error('Database error');
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockRejectedValue(error);
+      mockTranscriptionInstance.save.mockRejectedValue(error);
 
       await expect(
         service.createTranscription(mockTranscriptionData),
@@ -208,7 +219,7 @@ describe('TranscriptionService', () => {
   describe('createFailedTranscription', () => {
     it('should create failed transcription successfully', async () => {
       const mockSavedTranscription = {
-        _id: new Types.ObjectId(),
+        _id: new Types.ObjectId('507f1f77bcf86cd799439013'),
         fileId: new Types.ObjectId(mockFailedTranscriptionData.fileId),
         processingId: new Types.ObjectId(
           mockFailedTranscriptionData.processingId,
@@ -225,15 +236,13 @@ describe('TranscriptionService', () => {
         completedAt: expect.any(Date),
       };
 
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockResolvedValue(mockSavedTranscription);
+      mockTranscriptionInstance.save.mockResolvedValue(mockSavedTranscription);
 
       const result = await service.createFailedTranscription(
         mockFailedTranscriptionData,
       );
 
-      expect((mockTranscriptionModel as any).prototype.save).toHaveBeenCalled();
+      expect(mockTranscriptionInstance.save).toHaveBeenCalled();
       expect(result).toEqual(mockSavedTranscription);
       expect(result.status).toBe(TranscriptionStatus.FAILED);
       expect(result.error).toBe(mockFailedTranscriptionData.error);
@@ -241,9 +250,7 @@ describe('TranscriptionService', () => {
 
     it('should throw error when save fails', async () => {
       const error = new Error('Database error');
-      (mockTranscriptionModel as any).prototype.save = jest
-        .fn()
-        .mockRejectedValue(error);
+      mockTranscriptionInstance.save.mockRejectedValue(error);
 
       await expect(
         service.createFailedTranscription(mockFailedTranscriptionData),
@@ -263,13 +270,13 @@ describe('TranscriptionService', () => {
         exec: jest.fn().mockResolvedValue(mockTranscription),
       };
 
-      (mockTranscriptionModel as any).findOne.mockReturnValue(mockQuery);
+      mockTranscriptionModel.findOne.mockReturnValue(mockQuery as any);
 
       const result = await service.getTranscriptionByFileId(
         mockTranscriptionData.fileId,
       );
 
-      expect((mockTranscriptionModel as any).findOne).toHaveBeenCalledWith({
+      expect(mockTranscriptionModel.findOne).toHaveBeenCalledWith({
         fileId: new Types.ObjectId(mockTranscriptionData.fileId),
       });
       expect(result).toEqual(mockTranscription);
@@ -280,9 +287,11 @@ describe('TranscriptionService', () => {
         exec: jest.fn().mockResolvedValue(null),
       };
 
-      (mockTranscriptionModel as any).findOne.mockReturnValue(mockQuery);
+      mockTranscriptionModel.findOne.mockReturnValue(mockQuery as any);
 
-      const result = await service.getTranscriptionByFileId('nonexistent-id');
+      const result = await service.getTranscriptionByFileId(
+        '507f1f77bcf86cd799439011',
+      );
 
       expect(result).toBeNull();
     });
@@ -296,13 +305,13 @@ describe('TranscriptionService', () => {
         status: TranscriptionStatus.COMPLETED,
       };
 
-      (mockTranscriptionModel as any).findById.mockReturnValue({
+      mockTranscriptionModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(mockTranscription),
-      });
+      } as any);
 
       const result = await service.getTranscriptionById('transcription-id');
 
-      expect((mockTranscriptionModel as any).findById).toHaveBeenCalledWith(
+      expect(mockTranscriptionModel.findById).toHaveBeenCalledWith(
         'transcription-id',
       );
       expect(result).toEqual(mockTranscription);
@@ -325,14 +334,14 @@ describe('TranscriptionService', () => {
         exec: jest.fn().mockResolvedValue({ acknowledged: true }),
       };
 
-      (mockTranscriptionModel as any).updateOne.mockReturnValue(mockQuery);
+      mockTranscriptionModel.updateOne.mockReturnValue(mockQuery as any);
 
       await service.updateTranscriptionStatus(
         'transcription-id',
         TranscriptionStatus.COMPLETED,
       );
 
-      expect((mockTranscriptionModel as any).updateOne).toHaveBeenCalledWith(
+      expect(mockTranscriptionModel.updateOne).toHaveBeenCalledWith(
         { _id: 'transcription-id' },
         {
           status: TranscriptionStatus.COMPLETED,
@@ -347,7 +356,7 @@ describe('TranscriptionService', () => {
         exec: jest.fn().mockResolvedValue({ acknowledged: true }),
       };
 
-      (mockTranscriptionModel as any).updateOne.mockReturnValue(mockQuery);
+      mockTranscriptionModel.updateOne.mockReturnValue(mockQuery as any);
 
       await service.updateTranscriptionStatus(
         'transcription-id',
@@ -355,7 +364,7 @@ describe('TranscriptionService', () => {
         'Processing error',
       );
 
-      expect((mockTranscriptionModel as any).updateOne).toHaveBeenCalledWith(
+      expect(mockTranscriptionModel.updateOne).toHaveBeenCalledWith(
         { _id: 'transcription-id' },
         {
           status: TranscriptionStatus.FAILED,

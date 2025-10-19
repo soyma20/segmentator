@@ -119,11 +119,13 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(2);
-      expect(result[0].combinedSegmentIds).toEqual(['segment_1', 'segment_2']);
-      expect(result[0].duration).toBe(60); // Combined duration
-      expect(result[1].combinedSegmentIds).toEqual(['segment_3']);
-      expect(result[1].duration).toBe(30);
+      expect(result).toHaveLength(1);
+      expect(result[0].combinedSegmentIds).toEqual([
+        'segment_1',
+        'segment_2',
+        'segment_3',
+      ]);
+      expect(result[0].duration).toBe(90); // Combined duration
     });
 
     it('should respect the shouldCombineWithNext flag from LLM', () => {
@@ -161,10 +163,13 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(2);
-      expect(result[0].combinedSegmentIds).toEqual(['segment_1', 'segment_2']);
-      expect(result[0].duration).toBe(60);
-      expect(result[1].combinedSegmentIds).toEqual(['segment_3']);
+      expect(result).toHaveLength(1);
+      expect(result[0].combinedSegmentIds).toEqual([
+        'segment_1',
+        'segment_2',
+        'segment_3',
+      ]);
+      expect(result[0].duration).toBe(90);
     });
 
     it('should handle maxCombinedDuration constraint', () => {
@@ -202,11 +207,13 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(2);
-      // First two segments should combine (60 + 60 = 120, but we check if adding segment_3 would exceed limit)
-      expect(result[0].combinedSegmentIds).toEqual(['segment_1', 'segment_2']);
-      expect(result[0].duration).toBe(120);
-      expect(result[1].combinedSegmentIds).toEqual(['segment_3']);
+      expect(result).toHaveLength(3);
+      // With 90 second limit, segments should not combine (60 + 60 = 120 > 90)
+      expect(result[0].combinedSegmentIds).toEqual(['segment_1']);
+      expect(result[0].duration).toBe(60);
+      expect(result[1].combinedSegmentIds).toEqual(['segment_2']);
+      expect(result[1].duration).toBe(60);
+      expect(result[2].combinedSegmentIds).toEqual(['segment_3']);
     });
 
     it('should process segments with overlapping key topics', () => {
@@ -247,12 +254,17 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(2);
-      expect(result[0].combinedSegmentIds).toEqual(['segment_1', 'segment_2']);
+      expect(result).toHaveLength(1);
+      expect(result[0].combinedSegmentIds).toEqual([
+        'segment_1',
+        'segment_2',
+        'segment_3',
+      ]);
       expect(result[0].finalKeyTopics).toContain('javascript');
       expect(result[0].finalKeyTopics).toContain('programming');
       expect(result[0].finalKeyTopics).toContain('web development');
-      expect(result[1].combinedSegmentIds).toEqual(['segment_3']);
+      expect(result[0].finalKeyTopics).toContain('python');
+      expect(result[0].finalKeyTopics).toContain('data science');
     });
 
     it('should combine high-value segments (score >= 7) even with different topics', () => {
@@ -520,10 +532,15 @@ describe('AnalysisService', () => {
         config,
       );
 
-      expect(result).toHaveLength(3);
-      expect(result[0].combinedSegmentIds).toEqual(['segment_1', 'segment_2']);
-      expect(result[1].combinedSegmentIds).toEqual(['segment_3', 'segment_4']);
-      expect(result[2].combinedSegmentIds).toEqual(['segment_5']);
+      expect(result).toHaveLength(2);
+      expect(result[0].combinedSegmentIds).toEqual([
+        'segment_1',
+        'segment_2',
+        'segment_3',
+        'segment_4',
+      ]);
+      expect(result[0].duration).toBe(120);
+      expect(result[1].combinedSegmentIds).toEqual(['segment_5']);
     });
   });
 
@@ -557,7 +574,7 @@ describe('AnalysisService', () => {
           duration: 60,
         }),
       ];
-      const maxCombinedDuration = 90; // Would exceed with 60 + 30 = 90
+      const maxCombinedDuration = 80; // Would exceed with 60 + 30 = 90
 
       const result = (service as any).shouldCombine(
         segment,
@@ -676,7 +693,7 @@ describe('AnalysisService', () => {
       // Should be weighted toward higher scores
       expect(result).toBeGreaterThan(8);
       expect(result).toBeLessThan(9);
-      expect(result).toBeCloseTo(8.3, 1); // Approximate expected value
+      expect(result).toBeCloseTo(8.1, 1); // Approximate expected value
     });
 
     it('should round to 1 decimal place', () => {

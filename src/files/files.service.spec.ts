@@ -56,7 +56,12 @@ describe('FilesService', () => {
   };
 
   beforeEach(async () => {
-    const mockModel = {
+    const mockModelInstance = {
+      save: jest.fn(),
+    };
+
+    const mockModel = jest.fn().mockImplementation(() => mockModelInstance);
+    Object.assign(mockModel, {
       findById: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
@@ -65,7 +70,7 @@ describe('FilesService', () => {
       find: jest.fn(),
       findByIdAndDelete: jest.fn(),
       sort: jest.fn(),
-    };
+    });
 
     const mockQueue = {
       add: jest.fn(),
@@ -129,7 +134,18 @@ describe('FilesService', () => {
         format: 'mp4',
         uploadedAt: new Date(),
         totalProcessingRuns: 0,
-        save: jest.fn().mockResolvedValue({ _id: 'file-id' }),
+        save: jest.fn().mockResolvedValue({
+          _id: 'file-id',
+          originalName: 'test-video.mp4',
+          storedName: 'test-video.mp4',
+          filePath: '/uploads/test-video.mp4',
+          mimeType: 'video/mp4',
+          fileSize: 1024000,
+          duration: 120,
+          format: 'mp4',
+          uploadedAt: new Date(),
+          totalProcessingRuns: 0,
+        }),
       };
 
       const mockProcessingHistory = {
@@ -143,20 +159,24 @@ describe('FilesService', () => {
       };
 
       mockStorageService.uploadFile.mockResolvedValue(mockUploadResult);
-      mockFileModel.create.mockReturnValue(mockSavedFile as any);
-      mockProcessingHistoryModel.create.mockReturnValue(
-        mockProcessingHistory as any,
+      // Mock the save method on the file model instance
+      const fileModelInstance = new mockFileModel();
+      (fileModelInstance.save as jest.Mock).mockResolvedValue(mockSavedFile);
+
+      // Mock the save method on the processing history model instance
+      const processingHistoryModelInstance = new mockProcessingHistoryModel();
+      (processingHistoryModelInstance.save as jest.Mock).mockResolvedValue(
+        mockProcessingHistory,
       );
+
       mockTranscriptionQueue.add.mockResolvedValue({} as any);
 
       const result = await service.uploadFile(mockFile, mockUploadData);
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockStorageService.uploadFile).toHaveBeenCalledWith(mockFile);
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockFileModel.create).toHaveBeenCalled();
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockProcessingHistoryModel.create).toHaveBeenCalled();
+      expect(mockFileModel).toHaveBeenCalled();
+      expect(mockProcessingHistoryModel).toHaveBeenCalled();
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockTranscriptionQueue.add).toHaveBeenCalledWith(
         'process-transcription',
@@ -200,11 +220,17 @@ describe('FilesService', () => {
       const mockSavedFile = {
         _id: 'file-id',
         originalName: 'test-video.mp4',
-        save: jest.fn().mockResolvedValue({ _id: 'file-id' }),
+        save: jest.fn().mockResolvedValue({
+          _id: 'file-id',
+          originalName: 'test-video.mp4',
+        }),
       };
 
       mockStorageService.uploadFile.mockResolvedValue(mockUploadResult);
-      mockFileModel.create.mockReturnValue(mockSavedFile as any);
+      // Mock the save method on the file model instance
+      const fileModelInstance = new mockFileModel();
+      (fileModelInstance.save as jest.Mock).mockResolvedValue(mockSavedFile);
+
       mockTranscriptionQueue.add.mockResolvedValue({} as any);
 
       const result = await service.uploadFile(
@@ -213,6 +239,7 @@ describe('FilesService', () => {
       );
 
       expect(result.processingHistory).toBeUndefined();
+      expect(mockFileModel).toHaveBeenCalled();
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockTranscriptionQueue.add).toHaveBeenCalledWith(
         'process-transcription',
