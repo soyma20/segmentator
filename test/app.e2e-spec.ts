@@ -66,8 +66,8 @@ describe('AppController (e2e)', () => {
     });
 
     it('should have proper middleware configured', () => {
-      const httpServer = app.getHttpServer();
-      expect(httpServer).toBeDefined();
+      const server = app.getHttpServer();
+      expect(server).toBeDefined();
     });
   });
 });

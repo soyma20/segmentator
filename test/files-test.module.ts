@@ -8,6 +8,7 @@ import {
 } from '../src/processing/schemas/processing-history.schema';
 import { FilesTestService } from './files-test.service';
 import { FilesController } from '../src/files/files.controller';
+import { FilesService } from '../src/files/files.service';
 import { StorageModule } from '../src/common/providers/storage/storage.module';
 
 @Module({
@@ -20,7 +21,12 @@ import { StorageModule } from '../src/common/providers/storage/storage.module';
     // Exclude QueuesModule and BullModule for e2e testing
   ],
   controllers: [FilesController],
-  providers: [FilesTestService],
-  exports: [FilesTestService],
+  providers: [
+    {
+      provide: FilesService,
+      useClass: FilesTestService,
+    },
+  ],
+  exports: [FilesService],
 })
 export class FilesTestModule {}

@@ -16,7 +16,8 @@ export class FilesTestService {
 
   async uploadFile(
     file: Express.Multer.File,
-    uploadData: UploadFileDto,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _uploadData: UploadFileDto,
   ): Promise<{ file: File; processingHistory?: ProcessingHistory }> {
     // Mock implementation for testing
     const mockFile = new this.fileModel({
@@ -34,12 +35,18 @@ export class FilesTestService {
     return this.fileModel.find().exec();
   }
 
-  async getFileById(id: string): Promise<File | null> {
-    return this.fileModel.findById(id).exec();
+  async getFileById(id: string): Promise<File> {
+    const file = await this.fileModel.findById(id).exec();
+    if (!file) {
+      throw new Error('File not found');
+    }
+    return file;
   }
 
-  async deleteFile(id: string): Promise<boolean> {
+  async deleteFile(id: string): Promise<void> {
     const result = await this.fileModel.findByIdAndDelete(id).exec();
-    return !!result;
+    if (!result) {
+      throw new Error('File not found');
+    }
   }
 }
