@@ -1,4 +1,15 @@
-# Segmentator Project
+# Segmentator
+
+A NestJS-based backend service for comprehensive media file processing, transcription, and AI-powered analysis.
+
+## Features
+
+- **Media Processing**: Upload and process video/audio files
+- **Audio Transcription**: Convert speech to text using Google Cloud Speech or OpenAI Whisper
+- **AI Analysis**: Analyze transcribed content using OpenAI GPT models
+- **Async Processing**: Queue-based processing with BullMQ and Redis
+- **Video Clipping**: Extract segments based on AI analysis
+- **Multiple Storage**: Support for local and cloud storage (Google Cloud Storage)
 
 ## Architecture
 
@@ -70,6 +81,62 @@ Main tasks:
 
 ---
 
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- Docker and Docker Compose
+- MongoDB
+- Redis
+- FFmpeg
+
+### Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/yourusername/segmentator.git
+   cd segmentator
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys and configuration
+   ```
+
+4. **Start with Docker Compose**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+5. **Or run locally**
+   ```bash
+   # Start MongoDB and Redis
+   # Then run the application
+   npm run start:dev
+   ```
+
+### Environment Variables
+
+| Variable         | Description               | Default                                 |
+| ---------------- | ------------------------- | --------------------------------------- |
+| `MONGODB_URI`    | MongoDB connection string | `mongodb://localhost:27017/segmentator` |
+| `REDIS_HOST`     | Redis host                | `localhost`                             |
+| `OPENAI_API_KEY` | OpenAI API key            | Required for LLM analysis               |
+| `GOOGLE_API_KEY` | Google Cloud API key      | Required for transcription              |
+| `STORAGE_TYPE`   | Storage type              | `local`                                 |
+| `MAX_FILE_SIZE`  | Max upload size in MB     | `500`                                   |
+
 ## Deployment
 
 - **Dockerfile**, `docker-compose.yml` — containerization
@@ -78,3 +145,19 @@ Main tasks:
   ```bash
   npm run build && npm run start:prod
   ```
+
+## API Documentation
+
+The API documentation is available at `http://localhost:3000/api` when running the application.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

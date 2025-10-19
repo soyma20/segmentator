@@ -1,10 +1,21 @@
 {
   "name": "segmentator",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "A NestJS-based backend service for media file processing, transcription, and AI-powered analysis",
+  "author": "Yaroslav Soima <slaviksoyma2014@gmail.com>",
   "private": false,
   "license": "MIT",
+  "keywords": [
+    "nestjs",
+    "media-processing",
+    "transcription",
+    "ai-analysis",
+    "video-processing",
+    "audio-processing",
+    "openai",
+    "google-cloud",
+    "typescript"
+  ],
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
