@@ -10,6 +10,7 @@ import {
   Body,
   ParseFilePipe,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -20,13 +21,21 @@ import { UploadFileDto } from './dto/upload-file.dto';
 
 @Controller('files')
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private static getMaxFileSize(): number {
+    const maxFileSizeMB = parseInt(process.env.MAX_FILE_SIZE || '100', 10);
+    return maxFileSizeMB * 1024 * 1024;
+  }
 
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
       limits: {
-        fileSize: 100 * 1024 * 1024,
+        fileSize: FilesController.getMaxFileSize(),
       },
       fileFilter: (req, file, callback) => {
         if (MIMES.includes(file.mimetype)) {

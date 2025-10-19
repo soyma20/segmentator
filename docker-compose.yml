@@ -12,6 +12,7 @@ services:
       - REDIS_HOST=segmentator-redis
       - REDIS_PORT=6379
       - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-500}
       - UPLOAD_PATH=${UPLOAD_PATH:-./uploads}
       - STORAGE_BUCKET=${STORAGE_BUCKET:-}
       - STORAGE_REGION=${STORAGE_REGION:-us-central1}
