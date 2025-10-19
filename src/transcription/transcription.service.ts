@@ -6,7 +6,7 @@ import {
   TranscriptionStatus,
 } from './schemas/transcription.schema';
 import { TranscriptionSegment } from './schemas/transcription-segment.schema';
-import { TranscriptionProvider } from 'src/common/enums/transcription-provider.enum';
+import { TranscriptionProvider } from '../common/enums/transcription-provider.enum';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CreateTranscriptionData {

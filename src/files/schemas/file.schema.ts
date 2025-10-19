@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 import { Resolution, ResolutionSchema } from './resolution.schema';
-import { StorageType } from 'src/common/enums/storage-type.enum';
+import { StorageType } from '../../common/enums/storage-type.enum';
 
 @Schema({ timestamps: true })
 export class File extends Document {
@@ -15,7 +15,7 @@ export class File extends Document {
   @Prop({ required: true })
   filePath: string;
 
-  @Prop({ enum: StorageType, required: true })
+  @Prop({ type: String, enum: StorageType, required: true })
   storageType: StorageType;
 
   @Prop({ required: true })

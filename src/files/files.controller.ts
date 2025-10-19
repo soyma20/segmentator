@@ -15,7 +15,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
 import { FilesService } from './files.service';
-import { MIMES } from 'src/common/constants/mimes.constant';
+import { MIMES } from '../common/constants/mimes.constant';
 import { UploadFileDto } from './dto/upload-file.dto';
 
 @Controller('files')

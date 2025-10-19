@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-import { ProcessingStatus } from 'src/common/enums/processing-status.enum';
+import { ProcessingStatus } from '../../common/enums/processing-status.enum';
 import { Configuration, ConfigurationSchema } from './configuration.schema';
 import {
   ProcessingMetrics,
@@ -20,7 +20,7 @@ export class ProcessingHistory extends Document {
   @Prop()
   processingCompletedAt?: Date;
 
-  @Prop({ enum: ProcessingStatus, required: true })
+  @Prop({ type: String, enum: ProcessingStatus, required: true })
   processingStatus: ProcessingStatus;
 
   @Prop({ type: ConfigurationSchema, required: true })

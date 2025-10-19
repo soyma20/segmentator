@@ -6,7 +6,7 @@ import {
   TranscriptionSegment,
   TranscriptionSegmentSchema,
 } from './transcription-segment.schema';
-import { TranscriptionProvider } from 'src/common/enums/transcription-provider.enum';
+import { TranscriptionProvider } from '../../common/enums/transcription-provider.enum';
 
 export enum TranscriptionStatus {
   PENDING = 'pending',
@@ -24,6 +24,7 @@ export class Transcription extends Document {
   fileId: Types.ObjectId;
 
   @Prop({
+    type: String,
     enum: TranscriptionProvider,
     default: TranscriptionProvider.GOOGLE_SPEECH,
   })
@@ -47,7 +48,11 @@ export class Transcription extends Document {
   @Prop({ required: true })
   fullText: string;
 
-  @Prop({ enum: TranscriptionStatus, default: TranscriptionStatus.PENDING })
+  @Prop({
+    type: String,
+    enum: TranscriptionStatus,
+    default: TranscriptionStatus.PENDING,
+  })
   status: TranscriptionStatus;
 
   @Prop()

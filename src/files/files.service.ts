@@ -13,16 +13,16 @@ import { v4 as uuidv4 } from 'uuid';
 import * as ffmpeg from 'fluent-ffmpeg';
 
 import { File } from './schemas/file.schema';
-import { StorageType } from 'src/common/enums/storage-type.enum';
-import { FileOperationException } from 'src/common/exceptions/file-operation.exception';
-import { getErrorMessage, isNodeError } from 'src/common/utils/error.utils';
-import { TranscriptionJobData } from 'src/common/interfaces/transcription-job.interface';
-import { MIMES } from 'src/common/constants/mimes.constant';
+import { StorageType } from '../common/enums/storage-type.enum';
+import { FileOperationException } from '../common/exceptions/file-operation.exception';
+import { getErrorMessage, isNodeError } from '../common/utils/error.utils';
+import { TranscriptionJobData } from '../common/interfaces/transcription-job.interface';
+import { MIMES } from '../common/constants/mimes.constant';
 import { UploadFileDto } from './dto/upload-file.dto';
-import { ProcessingHistory } from 'src/processing/schemas/processing-history.schema';
-import { ProcessingStatus } from 'src/common/enums/processing-status.enum';
-import { VideoType } from 'src/common/enums/video-type.enum';
-import { StorageService } from 'src/common/providers/storage/storage.service';
+import { ProcessingHistory } from '../processing/schemas/processing-history.schema';
+import { ProcessingStatus } from '../common/enums/processing-status.enum';
+import { VideoType } from '../common/enums/video-type.enum';
+import { StorageService } from '../common/providers/storage/storage.service';
 
 type VideoMetadata = {
   duration: number;

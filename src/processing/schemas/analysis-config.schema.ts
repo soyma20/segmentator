@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-import { VideoType } from 'src/common/enums/video-type.enum';
+import { VideoType } from '../../common/enums/video-type.enum';
 
 @Schema({ _id: false })
 export class AnalysisConfig {
-  @Prop({ enum: VideoType, required: true })
+  @Prop({ type: String, enum: VideoType, required: true })
   videoType: VideoType;
 
   @Prop({ type: [String], default: [] })

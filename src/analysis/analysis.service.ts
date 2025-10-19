@@ -8,11 +8,11 @@ import { ProcessingHistory } from '../processing/schemas/processing-history.sche
 import { AnalysisResult } from './schemas/analysis.schema';
 import { AnalyzedSegment } from './schemas/analyzed-segment.schema';
 import { OptimizedSegment } from './schemas/optimized-segment.schema';
-import { LlmService } from 'src/common/providers/llm/llm.service';
+import { LlmService } from '../common/providers/llm/llm.service';
 import {
   SegmentAnalysisRequest,
   SegmentAnalysisResponse,
-} from 'src/common/interfaces/llm.interface';
+} from '../common/interfaces/llm.interface';
 import { getErrorMessage } from '../common/utils/error.utils';
 
 type SegmentForAnalysis = {

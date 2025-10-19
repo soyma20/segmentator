@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { LlmProvider } from 'src/common/enums/llm-provider.enum';
+import { LlmProvider } from '../../common/enums/llm-provider.enum';
 import { AnalysisConfig, AnalysisConfigSchema } from './analysis-config.schema';
 import { ClippingConfig, ClippingConfigSchema } from './clipping-config.schema';
 
@@ -8,7 +8,7 @@ export class Configuration {
   @Prop({ required: true })
   segmentDuration: number;
 
-  @Prop({ enum: LlmProvider, required: true })
+  @Prop({ type: String, enum: LlmProvider, required: true })
   llmProvider: LlmProvider;
 
   @Prop({ required: true })

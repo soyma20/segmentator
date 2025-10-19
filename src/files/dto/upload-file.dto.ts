@@ -7,8 +7,8 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { LlmProvider } from 'src/common/enums/llm-provider.enum';
-import { VideoType } from 'src/common/enums/video-type.enum';
+import { LlmProvider } from '../../common/enums/llm-provider.enum';
+import { VideoType } from '../../common/enums/video-type.enum';
 
 export class ClippingConfigDto {
   @IsNumber()

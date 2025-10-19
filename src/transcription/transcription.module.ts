@@ -17,9 +17,9 @@ import {
   ProcessingHistory,
   ProcessingHistorySchema,
 } from '../processing/schemas/processing-history.schema';
-import { QueuesModule } from 'src/queues/queues.module';
-import { AudioProcessingModule } from 'src/common/providers/audio-processing/audio-processing.module';
-import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
+import { QueuesModule } from '../queues/queues.module';
+import { AudioProcessingModule } from '../common/providers/audio-processing/audio-processing.module';
+import { FfmpegService } from '../services/ffmpeg/ffmpeg.service';
 
 @Module({
   imports: [

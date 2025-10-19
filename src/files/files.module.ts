@@ -6,11 +6,11 @@ import { File, FileSchema } from './schemas/file.schema';
 import {
   ProcessingHistory,
   ProcessingHistorySchema,
-} from 'src/processing/schemas/processing-history.schema';
+} from '../processing/schemas/processing-history.schema';
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
-import { QueuesModule } from 'src/queues/queues.module';
-import { StorageModule } from 'src/common/providers/storage/storage.module';
+import { QueuesModule } from '../queues/queues.module';
+import { StorageModule } from '../common/providers/storage/storage.module';
 
 @Module({
   imports: [

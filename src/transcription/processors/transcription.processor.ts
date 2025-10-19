@@ -7,10 +7,10 @@ import { TranscriptionService } from '../transcription.service';
 import {
   TranscriptionJobData,
   TranscriptionJobResult,
-} from 'src/common/interfaces/transcription-job.interface';
-import { AudioProcessingService } from 'src/common/providers/audio-processing/audio-processing.service';
-import { FfmpegService } from 'src/services/ffmpeg/ffmpeg.service';
-import { getErrorMessage } from 'src/common/utils/error.utils';
+} from '../../common/interfaces/transcription-job.interface';
+import { AudioProcessingService } from '../../common/providers/audio-processing/audio-processing.service';
+import { FfmpegService } from '../../services/ffmpeg/ffmpeg.service';
+import { getErrorMessage } from '../../common/utils/error.utils';
 
 interface TranscriptionRecord {
   _id: string;
