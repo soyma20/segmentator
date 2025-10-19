@@ -26,7 +26,7 @@ import { AudioProcessingService } from './audio-processing.service';
             return new AzureSpeechProcessor();
           case 'google_speech':
           default:
-            return new GoogleSpeechProcessor();
+            return new GoogleSpeechProcessor(configService);
         }
       },
       inject: [ConfigService],

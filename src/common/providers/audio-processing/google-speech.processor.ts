@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SpeechClient } from '@google-cloud/speech';
 import { google } from '@google-cloud/speech/build/protos/protos';
 import { Storage } from '@google-cloud/storage';
@@ -15,11 +16,15 @@ import {
 export class GoogleSpeechProcessor implements IAudioProcessor {
   private readonly speechClient: SpeechClient;
   private readonly storage: Storage;
-  private readonly BUCKET_NAME = 'yaro-segmentator-transcripts-2025';
+  private readonly bucketName: string;
 
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
     this.speechClient = new SpeechClient();
     this.storage = new Storage();
+    this.bucketName = this.configService.get<string>(
+      'GOOGLE_TRANSCRIPTION_UPLOAD_BUCKET',
+      '',
+    );
   }
 
   async transcribeAndSegmentAudio(
@@ -58,29 +63,31 @@ export class GoogleSpeechProcessor implements IAudioProcessor {
 
       return segments;
     } catch (error) {
-      throw new Error(`Google Speech transcription failed: ${error.message}`);
+      throw new Error(
+        `Google Speech transcription failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   private async uploadToGcs(filePath: string): Promise<string> {
-    const bucket = this.storage.bucket(this.BUCKET_NAME);
+    const bucket = this.storage.bucket(this.bucketName);
     const fileName = `temp-${randomUUID()}.wav`;
     const file = bucket.file(fileName);
 
     await file.save(await fs.readFile(filePath));
-    return `gs://${this.BUCKET_NAME}/${fileName}`;
+    return `gs://${this.bucketName}/${fileName}`;
   }
 
   private async deleteFromGcs(gcsUri: string): Promise<void> {
     const fileName = gcsUri.split('/').pop();
     if (!fileName) return;
 
-    const bucket = this.storage.bucket(this.BUCKET_NAME);
+    const bucket = this.storage.bucket(this.bucketName);
     const file = bucket.file(fileName);
 
     try {
       await file.delete();
-    } catch (error) {
+    } catch {
       // Ignore deletion errors
     }
   }
