@@ -128,14 +128,25 @@ Main tasks:
 
 ### Environment Variables
 
-| Variable         | Description               | Default                                 |
-| ---------------- | ------------------------- | --------------------------------------- |
-| `MONGODB_URI`    | MongoDB connection string | `mongodb://localhost:27017/segmentator` |
-| `REDIS_HOST`     | Redis host                | `localhost`                             |
-| `OPENAI_API_KEY` | OpenAI API key            | Required for LLM analysis               |
-| `GOOGLE_API_KEY` | Google Cloud API key      | Required for transcription              |
-| `STORAGE_TYPE`   | Storage type              | `local`                                 |
-| `MAX_FILE_SIZE`  | Max upload size in MB     | `500`                                   |
+| Variable                             | Description                                   | Default                                         |
+| ------------------------------------ | --------------------------------------------- | ----------------------------------------------- |
+| `NODE_ENV`                           | Node.js environment                           | `development`                                   |
+| `MONGODB_URI`                        | MongoDB connection string                     | `mongodb://segmentator-mongo:27017/segmentator` |
+| `REDIS_HOST`                         | Redis host                                    | `segmentator-redis`                             |
+| `REDIS_PORT`                         | Redis port                                    | `6379`                                          |
+| `STORAGE_TYPE`                       | Storage type (`local` or `gcs`)               | `local`                                         |
+| `MAX_FILE_SIZE`                      | Max upload size in MB                         | `500`                                           |
+| `UPLOAD_PATH`                        | Local upload directory path                   | `./uploads`                                     |
+| `STORAGE_BUCKET`                     | Google Cloud Storage bucket name              | (empty)                                         |
+| `STORAGE_REGION`                     | Google Cloud Storage region                   | `us-central1`                                   |
+| `TRANSCRIPTION_PROVIDER`             | Transcription service provider                | `google_speech`                                 |
+| `LLM_PROVIDER`                       | LLM service provider                          | `openai`                                        |
+| `OPENAI_API_KEY`                     | OpenAI API key                                | Required for LLM analysis                       |
+| `ANTHROPIC_API_KEY`                  | Anthropic API key                             | Required for Anthropic LLM                      |
+| `GOOGLE_API_KEY`                     | Google Cloud API key                          | Required for transcription                      |
+| `GOOGLE_TRANSCRIPTION_UPLOAD_BUCKET` | Google Cloud Storage bucket for transcription | (empty)                                         |
+| `GOOGLE_APPLICATION_CREDENTIALS`     | Path to Google service account key            | `/app/your-key.json`                            |
+| `MONGO_EXPRESS_PASSWORD`             | MongoDB Express admin password                | (empty)                                         |
 
 ## Deployment
 
