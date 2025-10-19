@@ -124,7 +124,7 @@ run_performance_test() {
     
     # Run Artillery with comprehensive output
     artillery run \
-        --config "$ARTILLERY_CONFIG" \
+        "$ARTILLERY_CONFIG" \
         --output "$RESULTS_FILE" \
         --target "$TARGET_URL" \
         2>&1 | tee "$LOG_FILE"
